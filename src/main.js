@@ -1,7 +1,6 @@
 import {
-  createElement, Images, SlidersHorizontal, Plus, ClipboardPaste, Scan,
-  Minimize2, ChevronDown, FileOutput, ArrowRight, ShieldCheck, CircleHelp,
-  X, CircleCheck, Download, Info, ArrowUp, ArrowDown,
+  createElement, Plus, ChevronDown, ShieldCheck, CircleHelp,
+  X, CircleCheck, Download, Info, ArrowLeft, ArrowRight,
 } from 'lucide';
 import { artwork } from './art.js';
 import { wireIntake } from './intake.js';
@@ -9,9 +8,7 @@ import { prepareImage, exportPdf } from './conversion.js';
 import './style.css';
 
 const icons = {
-  images: Images, sliders: SlidersHorizontal, plus: Plus, paste: ClipboardPaste,
-  frame: Scan, compression: Minimize2, chevron: ChevronDown, pdf: FileOutput,
-  'arrow-right': ArrowRight, shield: ShieldCheck, help: CircleHelp, close: X,
+  plus: Plus, chevron: ChevronDown, shield: ShieldCheck, help: CircleHelp, close: X,
   success: CircleCheck, download: Download, info: Info,
 };
 const byId = id => document.getElementById(id);
@@ -43,6 +40,7 @@ const items = [];
 const waiting = [];
 let preparing = false;
 let exporting = false;
+let filenameEdited = false;
 let resultUrl;
 
 function pageCount(n) { return n === 1 ? '1 page' : n + ' pages'; }
@@ -50,9 +48,28 @@ function formatSize(bytes) {
   if (bytes >= 1_000_000) return (bytes / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + ' MB';
   return Math.max(1, Math.round(bytes / 1000)) + ' KB';
 }
-function outputName() {
-  const name = filename.value.trim().replace(/\.pdf$/i, '').replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-').replace(/[. ]+$/, '');
-  return (name || 'My document') + '.pdf';
+function filenameStem(value) {
+  const clean = value.normalize('NFC').trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '-');
+  const encoder = new TextEncoder();
+  let stem = '';
+  let bytes = 0;
+  // Leave room for the extension and for the browser's duplicate-download suffix.
+  for (const character of clean) {
+    bytes += encoder.encode(character).length;
+    if (bytes > 240) break;
+    stem += character;
+  }
+  stem = stem.replace(/[.\s]+$/u, '');
+  while (/\.pdf$/i.test(stem)) stem = stem.slice(0, -4).replace(/[.\s]+$/u, '');
+  stem = stem.replace(/^[.\s]+/u, '');
+  if (/^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(stem)) stem = '_' + stem;
+  return stem || 'Untitled';
+}
+function updateDownloadName() {
+  const name = filenameStem(filename.value) + '.pdf';
+  download.download = name;
+  byId('result-name').textContent = name;
 }
 function announce(text) { byId('live-status').textContent = text; }
 function clearResult() {
@@ -72,13 +89,11 @@ function updateControls() {
   chooseButton.disabled = pasteButton.disabled = exporting;
   chooseButton.querySelector('span').textContent = preparing ? 'Preparing images…' : 'Choose images';
   dropZone.classList.toggle('compact', items.length > 0);
-  byId('drop-title').textContent = items.length ? 'Add more images' : 'Drop your images here';
-  byId('image-count').textContent = items.length + (items.length === 1 ? ' file' : ' files');
+  byId('drop-title').textContent = items.length ? 'Add more images' : 'Drop images here';
+  byId('image-count').textContent = items.length + (items.length === 1 ? ' image' : ' images');
   queue.hidden = !items.length;
   const inputSize = items.reduce((total, item) => total + item.size, 0);
-  byId('convert-hint').textContent = preparing ? 'Preparing images…'
-    : items.length ? pageCount(items.length) + ' · ' + formatSize(inputSize) + ' of images'
-      : 'Add an image to get started.';
+  byId('convert-hint').textContent = items.length ? pageCount(items.length) + ' · ' + formatSize(inputSize) : '0 pages';
 }
 
 async function addFiles(files) {
@@ -98,6 +113,10 @@ async function addFiles(files) {
       try {
         const item = await prepareImage(file);
         clearResult();
+        if (!items.length && !filenameEdited) {
+          const extension = item.name.lastIndexOf('.');
+          filename.value = filenameStem(extension > 0 ? item.name.slice(0, extension) : item.name);
+        }
         items.push(item);
         queue.append(imageRow(item));
         refreshRows();
@@ -136,8 +155,8 @@ function imageRow(item) {
   const actions = document.createElement('div');
   actions.className = 'row-actions';
   const controls = [
-    ['earlier', 'Move ' + item.name + ' earlier', ArrowUp],
-    ['later', 'Move ' + item.name + ' later', ArrowDown],
+    ['earlier', 'Move ' + item.name + ' earlier', ArrowLeft],
+    ['later', 'Move ' + item.name + ' later', ArrowRight],
     ['remove', 'Remove ' + item.name, X],
   ];
   for (const [action, label, shape] of controls) {
@@ -170,6 +189,7 @@ queue.addEventListener('click', event => {
   clearResult();
   if (action === 'remove') {
     items.splice(index, 1);
+    if (!items.length && !filenameEdited) filename.value = '';
     URL.revokeObjectURL(item.thumbnail);
     row.remove();
     (queue.children[index]?.querySelector('[data-action="remove"]') ||
@@ -202,7 +222,11 @@ compression.addEventListener('change', () => {
   }[compression.value];
 });
 filename.addEventListener('input', () => {
-  if (resultUrl) download.download = outputName();
+  filenameEdited = true;
+  if (resultUrl) updateDownloadName();
+});
+filename.addEventListener('blur', () => {
+  filename.value = filename.value.trim() ? filenameStem(filename.value) : '';
 });
 
 convert.addEventListener('click', async () => {
@@ -219,7 +243,7 @@ convert.addEventListener('click', async () => {
     });
     resultUrl = URL.createObjectURL(blob);
     download.href = resultUrl;
-    download.download = outputName();
+    updateDownloadName();
     const inputSize = items.reduce((total, item) => total + item.size, 0);
     const savings = Math.floor((1 - blob.size / inputSize) * 100);
     const detail = pageCount(items.length) + ' · ' + formatSize(blob.size);
@@ -231,7 +255,7 @@ convert.addEventListener('click', async () => {
     showMessage('Could not create the PDF. ' + error.message);
   } finally {
     exporting = false;
-    convertText.textContent = 'Convert to PDF';
+    convertText.textContent = 'Download PDF';
     updateControls();
     refreshRows();
   }
@@ -246,7 +270,7 @@ function openDialog(title, content) {
 byId('formats-button').addEventListener('click', () => openDialog('Supported formats',
   '<p>Paperfold accepts JPG, JPEG, PNG, WebP, GIF, BMP, SVG, HEIC, HEIF, TIFF, and other images your browser can open.</p><p>Animated images and multi-image files contribute one still image per file. Transparent areas appear white in the PDF.</p>'));
 byId('help').addEventListener('click', () => openDialog('How it works',
-  '<ol class="help-steps"><li><strong>Add your images</strong>Choose files, drop them into the workspace, or paste a copied image or screenshot.</li><li><strong>Arrange your pages</strong>Each image becomes one page. Use the arrow buttons to change their order.</li><li><strong>Convert and save</strong>Choose a page size and compression setting, then select Convert to PDF to download your file.</li></ol>'));
+  '<ol class="help-steps"><li><strong>Add your images</strong>Choose files, drop them in the image area, or paste a copied image or screenshot.</li><li><strong>Arrange your pages</strong>Each image becomes one page. Use the arrows to change their order.</li><li><strong>Name and download</strong>Enter a file name, choose your page size and compression, then select Download PDF.</li></ol>'));
 byId('close-dialog').addEventListener('click', () => dialog.close());
 dialog.addEventListener('click', event => {
   const rect = dialog.getBoundingClientRect();

@@ -3,75 +3,78 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f8f8f5">
-    <meta name="description" content="Convert images into a PDF on your device. Add photos or paste screenshots, arrange your pages, and compress large files in your browser.">
+    <meta name="theme-color" content="#f8f7f3">
+    <meta name="description" content="Arrange photos and screenshots, name your document, and download a PDF. All image conversion happens on your device.">
     <link rel="icon" type="image/svg+xml" href="./mark.svg">
     <title>Image to PDF · Paperfold</title>
   </head>
   <body>
-    <header class="topbar">
-      <div class="wrap topbar-inner">
-        <div class="brand"><img src="./mark.svg" alt="" width="34" height="34"><span>Paperfold</span></div>
-        <button class="help-button" id="help" type="button"><i data-icon="help"></i>How it works</button>
+    <header class="masthead">
+      <div class="wrap masthead-inner">
+        <div class="brand"><img src="./mark.svg" alt="" width="34" height="34">Paperfold</div>
+        <div class="header-actions">
+          <span class="local-note"><i data-icon="shield"></i>On-device processing</span>
+          <button class="guide" id="help" type="button"><i data-icon="help"></i>How it works</button>
+        </div>
       </div>
     </header>
     <main class="wrap">
       <div class="intro">
-        <h1>Image to PDF</h1>
-        <p>Combine, arrange, and compress your images into a single PDF.</p>
+        <h1>Image to <em>PDF</em></h1>
+        <p>Arrange your photos and screenshots<br> into a single document.</p>
       </div>
       <div class="workspace">
-        <section class="card images-card" aria-labelledby="images-heading">
-          <div class="card-heading">
-            <i class="heading-icon" data-icon="images"></i><h2 id="images-heading">Your images</h2>
-            <span class="count" id="image-count">0 files</span>
+        <section class="source-section" aria-labelledby="images-heading">
+          <div class="section-heading">
+            <h2 id="images-heading">Source images</h2>
+            <div class="source-summary"><span class="inventory" id="image-count">0 images</span><a href="#settings-heading" class="export-jump">PDF export ↓</a></div>
           </div>
-          <div class="image-body">
-            <div class="drop-zone" id="drop-zone">
-              <div id="artwork"></div>
-              <h3 id="drop-title">Drop your images here</h3>
-              <p id="paste-hint"><span class="paste-desktop">or paste from your clipboard with</span><span class="paste-touch">or paste a copied image or screenshot</span> <kbd id="modifier">Ctrl</kbd><kbd>V</kbd></p>
+          <div class="drop-zone" id="drop-zone">
+            <div class="crop-marks" aria-hidden="true"></div>
+            <div id="artwork"></div>
+            <div class="drop-content">
+              <h3 id="drop-title">Drop images here</h3>
+              <p class="drop-hint">Each image becomes one page.</p>
               <div class="intake-buttons">
-                <button id="choose" type="button" class="button primary"><i data-icon="plus"></i><span>Choose images</span></button>
-                <button id="paste" type="button" class="button secondary"><i data-icon="paste"></i>Paste</button>
+                <button id="choose" type="button" class="button choose"><i data-icon="plus"></i><span>Choose images</span></button>
+                <button id="paste" type="button" class="button paste">Paste<kbd><span id="modifier">Ctrl</span> V</kbd></button>
               </div>
-              <input type="file" hidden multiple id="image-input" accept="image/*,.heic,.heif,.jfif,.tif,.tiff,.avif,.webp,.jxl">
             </div>
-            <div id="message" class="message" hidden><i data-icon="info"></i><span role="status" id="message-text"></span><button id="dismiss-message" aria-label="Dismiss message"><i data-icon="close"></i></button></div>
-            <ol id="queue" class="queue" aria-label="Images in PDF page order" hidden></ol>
-            <div class="formats">
-              <span>Supported formats</span>
-              <div class="format-tags"><span>JPG</span><span>PNG</span><span>WEBP</span><button id="formats-button" type="button" aria-label="See all supported formats">+ more</button></div>
-            </div>
+            <input type="file" hidden multiple id="image-input" accept="image/*,.heic,.heif,.jfif,.tif,.tiff,.avif,.webp,.jxl">
+          </div>
+          <div id="message" class="message" hidden>
+            <i data-icon="info"></i><span role="status" id="message-text"></span>
+            <button id="dismiss-message" aria-label="Dismiss message"><i data-icon="close"></i></button>
+          </div>
+          <ol id="queue" class="queue" aria-label="Images in PDF page order" hidden></ol>
+          <div class="format-line">
+            <span>JPG, PNG, WebP, HEIC <span class="format-extra">and more</span></span>
+            <button id="formats-button" type="button" aria-label="See all supported formats">All formats <span aria-hidden="true">↗</span></button>
           </div>
         </section>
-        <section class="card settings-card" aria-labelledby="settings-heading">
-          <div class="card-heading"><i class="heading-icon" data-icon="sliders"></i><h2 id="settings-heading">PDF settings</h2></div>
-          <div class="settings-body">
-            <div class="field">
-              <label for="filename">File name</label>
-              <div class="field-control filename-control"><input id="filename" value="My document" placeholder="My document" maxlength="120" autocomplete="off" spellcheck="false"><span>.pdf</span></div>
-            </div>
-            <div class="field">
-              <label for="page-size">Page size</label>
-              <div class="field-control select-control"><i data-icon="frame"></i><select id="page-size"><option value="fit">Fit to image</option><option value="a4">A4</option><option value="letter">US Letter</option></select><i data-icon="chevron"></i></div>
-            </div>
-            <div class="field">
-              <label for="compression">Compression</label>
-              <div class="field-control select-control"><i data-icon="compression"></i><select id="compression" aria-describedby="compression-hint"><option value="auto">Automatic</option><option value="small">Smaller file</option><option value="quality">High quality</option></select><i data-icon="chevron"></i></div>
-              <p class="field-hint" id="compression-hint">Compresses large images automatically.</p>
-            </div>
-            <div class="convert-area">
-              <button id="convert" class="button convert" disabled><i data-icon="pdf"></i><span>Convert to PDF</span><i data-icon="arrow-right"></i></button>
-              <p id="convert-hint">Add an image to get started.</p>
-            </div>
+        <section class="export-section" aria-labelledby="settings-heading">
+          <div class="section-heading">
+            <h2 id="settings-heading" tabindex="-1">PDF export</h2><span id="convert-hint" class="inventory">0 pages</span>
+          </div>
+          <div class="name-field">
+            <label for="filename">Save PDF as</label>
+            <div class="name-input"><input id="filename" type="text" placeholder="Untitled" maxlength="180" autocomplete="off" spellcheck="false" autocapitalize="off" dir="auto"><span aria-hidden="true">.pdf</span></div>
+          </div>
+          <div class="setting-row">
+            <label for="page-size">Page size</label>
+            <div class="select-wrap"><select id="page-size"><option value="fit">Fit to image</option><option value="a4">A4</option><option value="letter">US Letter</option></select><i data-icon="chevron"></i></div>
+          </div>
+          <div class="setting-row">
+            <label for="compression">Compression</label>
+            <div class="select-wrap"><select id="compression" aria-describedby="compression-hint"><option value="auto">Automatic</option><option value="small">Smaller file</option><option value="quality">High quality</option></select><i data-icon="chevron"></i></div>
+          </div>
+          <p class="field-hint" id="compression-hint">Compresses large images automatically.</p>
+          <button id="convert" class="button convert" type="button" disabled><i data-icon="download"></i><span>Download PDF</span></button>
+          <div id="result" class="result" hidden>
+            <div class="result-heading"><i data-icon="success"></i><strong id="result-name" dir="auto"></strong></div>
+            <p id="result-detail"></p><a id="download"><i data-icon="download"></i>Download again</a>
           </div>
         </section>
-      </div>
-      <div id="result" class="result" hidden><div class="result-icon"><i data-icon="success"></i></div><div><strong>Your PDF is ready</strong><p id="result-detail"></p></div><a id="download" class="button secondary"><i data-icon="download"></i>Download PDF</a></div>
-      <div class="privacy">
-        <div class="privacy-icon"><i data-icon="shield"></i></div>
-        <div><h2>Private, on-device conversion</h2><p>Your images stay in this browser tab while you work.</p></div>
       </div>
       <div class="sr-only" id="live-status" role="status" aria-atomic="true"></div>
     </main>

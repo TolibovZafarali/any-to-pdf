@@ -1,89 +1,38 @@
 .paper-stack {
   position: relative;
   isolation: isolate;
-  width: 172px;
-  height: 118px;
+  width: min(240px, 100%);
+  aspect-ratio: 240 / 158;
   margin-inline: auto;
-  pointer-events: none;
   user-select: none;
+  pointer-events: none;
 }
 
-.paper-stack > span {
+.paper-stack__photo {
   position: absolute;
+  display: block;
   box-sizing: border-box;
+  aspect-ratio: 1.45;
+  padding: 2.2% 2.2% 3%;
+  background: #fffdf6;
+  border: 1px solid #e5e1d6;
+  box-shadow: 0 1px 2px rgb(37 29 18 / 17%), 2px 6px 9px -3px rgb(52 42 28 / 22%);
 }
 
-.paper-stack__grid {
-  top: 17px;
-  left: 16px;
-  width: 91px;
-  height: 82px;
-  transform: rotate(-17deg);
-  border: 1px solid #ded4bd;
-  border-radius: 3px;
-  background-color: #f8eeda;
-  background-image: linear-gradient(#d6c7a978 1px, transparent 1px),
-    linear-gradient(90deg, #d6c7a978 1px, transparent 1px);
-  background-size: 7px 7px;
-  background-position: center;
-  box-shadow: 0 3px 5px #46371417;
+.paper-stack__photo--back {
+  inset: 10% auto auto 5%;
+  width: 63%;
+  transform: rotate(-11deg);
 }
 
-.paper-stack__sheet {
-  top: 8px;
-  right: 19px;
-  width: 81px;
-  height: 88px;
-  transform: rotate(14deg);
-  border-radius: 3px;
-  filter: drop-shadow(0 2px 2px #3a2b5e21);
+.paper-stack__photo--front {
+  inset: 16% 4% auto auto;
+  width: 72.5%;
+  transform: rotate(6deg);
+  box-shadow: 0 1px 2px rgb(37 29 18 / 19%), 2px 5px 7px -2px rgb(52 42 28 / 26%), 4px 11px 14px -8px rgb(52 42 28 / 20%);
 }
 
-.paper-stack__sheet::before {
-  position: absolute;
-  inset: 0;
-  border: 1px solid #cfc6e4;
-  border-radius: 3px;
-  background: linear-gradient(135deg, #eee8f8, #ded4f0);
-  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
-  content: '';
-}
-
-.paper-stack__sheet::after {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 16px;
-  height: 16px;
-  border-bottom-left-radius: 3px;
-  background: linear-gradient(45deg, #b7a9d1, #dad0e9);
-  clip-path: polygon(0 0, 100% 100%, 0 100%);
-  content: '';
-}
-
-.paper-stack__filetype {
-  position: absolute;
-  top: 9px;
-  left: 10px;
-  color: #736585;
-  font: 700 8px/1 Arial, sans-serif;
-  letter-spacing: .09em;
-}
-
-.paper-stack__print {
-  bottom: 11px;
-  left: 27px;
-  width: 123px;
-  height: 80px;
-  padding: 4px 4px 7px;
-  transform: rotate(-6deg);
-  border: 1px solid #e9e3db;
-  border-radius: 2px;
-  background: #fffdf8;
-  box-shadow: 0 1px 1px #2e1d391a, 0 4px 7px #2e1d391f;
-}
-
-.paper-stack__print img {
+.paper-stack__photo img {
   display: block;
   width: 100%;
   height: 100%;
