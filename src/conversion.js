@@ -56,17 +56,137 @@ function drawImage(image, maxEdge, maxPixels) {
   return canvas;
 }
 
-async function decodeTiff(file) {
-  const { default: tiff } = await import('utif2');
+async function readTiff(file) {
   const bytes = await file.arrayBuffer();
-  const [frame] = tiff.decode(bytes);
+  const directory = new DataView(bytes);
+  const little = directory.getUint16(0) === 0x4949;
+  const start = directory.getUint32(4, little);
+  const count = directory.getUint16(start, little);
+  const next = start + 2 + count * 12;
+  if (!count || next + 4 > bytes.byteLength) throw new Error('Invalid TIFF directory.');
+
+  // The PDF uses one page. Ignore later directories and auxiliary metadata so
+  // a circular linked list cannot hang the decoder.
+  directory.setUint32(next, 0, little);
+  const fieldSizes = [0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8, 4];
+  for (let entry = start + 2; entry < next; entry += 12) {
+    const tag = directory.getUint16(entry, little);
+    const type = directory.getUint16(entry + 2, little);
+    const length = directory.getUint32(entry + 4, little) * (fieldSizes[type] || 0);
+    if (length > 4 && directory.getUint32(entry + 8, little) + length > bytes.byteLength) {
+      throw new Error('Incomplete TIFF field.');
+    }
+    if ([330, 34665, 34853, 50740, 61440].includes(tag)) directory.setUint16(entry, 0, little);
+  }
+
+  const { default: tiff } = await import('utif2');
+  const [frame] = tiff.decode(bytes, { parseMN: false });
   const width = frame?.t256?.[0];
   const height = frame?.t257?.[0];
-  if (!width || !height || width * height > 64_000_000) {
-    throw new Error('Invalid or oversized TIFF.');
+  const tiled = Boolean(frame?.t322 || frame?.t323 || frame?.t324);
+  const blockWidth = tiled ? frame.t322?.[0] : width;
+  const blockHeight = tiled ? frame.t323?.[0] : Math.min(frame?.t278?.[0] ?? height, height);
+  const samples = frame?.t277?.[0] ?? 1;
+  const depth = frame?.t258?.[0] ?? 1;
+  if (![width, height, blockWidth, blockHeight, samples, depth].every(n => Number.isSafeInteger(n) && n > 0)) {
+    throw new Error('Invalid TIFF image geometry.');
   }
-  tiff.decodeImage(bytes, frame);
-  const data = new Uint8ClampedArray(tiff.toRGBA8(frame).buffer);
+  const planes = frame.t284?.[0] === 2 ? samples : 1;
+  const blocks = Math.ceil(width / blockWidth) * Math.ceil(height / blockHeight);
+  const offsets = tiled ? frame.t324 : frame.t273;
+  const lengths = tiled ? frame.t325 : frame.t279;
+  const raw = (frame.t259?.[0] ?? 1) === 1;
+  if (offsets?.length !== blocks * planes || (lengths && lengths.length !== offsets.length)) {
+    throw new Error('Invalid TIFF image blocks.');
+  }
+  const ycbcr = frame.t262?.[0] === 6;
+  const [horizontal, vertical] = frame.t530 || [2, 2];
+  if (ycbcr && ![horizontal, vertical].every(n => [1, 2, 4].includes(n))) {
+    throw new Error('Invalid TIFF chroma subsampling.');
+  }
+  for (let i = 0; i < offsets.length; i++) {
+    const rows = tiled ? blockHeight : Math.min(blockHeight, height - (i % blocks) * blockHeight);
+    let minimum = 1;
+    if (raw && ycbcr && planes === 1) {
+      // Each clump stores several luminance samples but only two chroma samples.
+      const clumps = Math.ceil(blockWidth / horizontal) * Math.ceil(rows / vertical);
+      minimum = Math.ceil(clumps * (horizontal * vertical + 2) * depth / 8);
+    } else if (raw && !ycbcr) {
+      minimum = Math.ceil(blockWidth * depth * samples / planes / 8) * rows;
+    }
+    const length = lengths?.[i] ?? (raw && offsets.length === 1 ? minimum : 0);
+    const offset = offsets[i];
+    if (!Number.isSafeInteger(length) || !Number.isSafeInteger(offset) || offset < 0 ||
+        length < minimum || offset + length > bytes.byteLength) {
+      throw new Error('Incomplete TIFF image data.');
+    }
+  }
+  return { bytes, frame, tiff, width, height, blockWidth, blockHeight, samples, depth,
+    rawChroma: raw && ycbcr, offsets, horizontal, vertical };
+}
+
+function unpackChroma({ bytes, frame, width, height, blockWidth, blockHeight, samples, offsets, horizontal, vertical }) {
+  if (samples !== 3 || !frame.t258?.every(bits => bits === 8) ||
+      (frame.t266?.[0] ?? 1) !== 1 || (frame.t317?.[0] ?? 1) !== 1 ||
+      frame.t339?.some(format => format !== 1) || frame.t34675) {
+    throw new Error('Unsupported TIFF color encoding.');
+  }
+  const ratios = values => values?.map(([numerator, denominator]) => numerator / denominator);
+  const [kr, kg, kb] = ratios(frame.t529) || [0.299, 0.587, 0.114];
+  const [y0, y1, cb0, cb1, cr0, cr1] = ratios(frame.t532) || [0, 255, 128, 255, 128, 255];
+  if (![kr, kg, kb, y0, y1, cb0, cb1, cr0, cr1].every(Number.isFinite) ||
+      Math.min(kr, kg, kb) <= 0 || Math.abs(kr + kg + kb - 1) > 0.001 ||
+      y1 <= y0 || cb1 <= cb0 || cr1 <= cr0) throw new Error('Invalid TIFF color parameters.');
+
+  const input = new Uint8Array(bytes);
+  const pixels = new Uint8ClampedArray(width * height * 4);
+  const blocksAcross = Math.ceil(width / blockWidth);
+  const clumpsAcross = Math.ceil(blockWidth / horizontal);
+  const lumaCount = horizontal * vertical;
+  for (let y = 0; y < height; y++) {
+    const blockRow = Math.floor(y / blockHeight) * blocksAcross;
+    const localY = y % blockHeight;
+    const clumpRow = Math.floor(localY / vertical) * clumpsAcross;
+    const lumaRow = (localY % vertical) * horizontal;
+    for (let x = 0; x < width; x++) {
+      const localX = x % blockWidth;
+      const block = offsets[blockRow + Math.floor(x / blockWidth)];
+      const clump = block + (clumpRow + Math.floor(localX / horizontal)) * (lumaCount + 2);
+      const luma = (input[clump + lumaRow + localX % horizontal] - y0) * 255 / (y1 - y0);
+      const cb = (input[clump + lumaCount] - cb0) * 127 / (cb1 - cb0);
+      const cr = (input[clump + lumaCount + 1] - cr0) * 127 / (cr1 - cr0);
+      const red = luma + cr * (2 - 2 * kr);
+      const blue = luma + cb * (2 - 2 * kb);
+      const pixel = (y * width + x) * 4;
+      pixels[pixel] = red;
+      pixels[pixel + 1] = (luma - kr * red - kb * blue) / kg;
+      pixels[pixel + 2] = blue;
+      pixels[pixel + 3] = 255;
+    }
+  }
+  return pixels;
+}
+
+async function decodeTiff(image) {
+  const { bytes, frame, tiff, width, height, blockWidth, blockHeight, samples, depth } = image;
+  const pixels = Math.max(width * height, blockWidth * blockHeight);
+  if (pixels > 64_000_000 || depth > 32 || samples > 8 || pixels * depth * samples / 8 > 256 * MIB) {
+    throw new Error('Oversized TIFF.');
+  }
+  // UTIF silently fills the page with zeroes for unknown compression methods.
+  const supported = [1, 2, 3, 4, 5, 6, 7, 8, 9, 32767, 32773, 32809, 32946, 34316, 34676, 34713, 34892];
+  if (!supported.includes(frame.t259?.[0] ?? 1) || frame.t284?.[0] === 2) {
+    throw new Error('Unsupported TIFF encoding.');
+  }
+  let data;
+  if (image.rawChroma) {
+    data = unpackChroma(image);
+  } else {
+    if (frame.t278) frame.t278 = [Math.min(height, frame.t278[0])];
+    tiff.decodeImage(bytes, frame);
+    if (frame.t262?.[0] === 6) throw new Error('Unsupported TIFF chroma layout.');
+    data = new Uint8ClampedArray(tiff.toRGBA8(frame).buffer);
+  }
   const { canvas, context } = makeCanvas(width, height);
   let oriented;
   try {
@@ -90,10 +210,10 @@ async function decodeTiff(file) {
   }
 }
 
-async function fallbackSource(file) {
-  const signature = String.fromCharCode(...new Uint8Array(await file.slice(0, 32).arrayBuffer()));
-  if (/^(II\*\x00|MM\x00\*)/.test(signature) || /\.tiff?$/i.test(file.name) || file.type === 'image/tiff') {
-    return decodeTiff(file);
+async function fallbackSource(file, signature, tiff) {
+  if (tiff) return decodeTiff(tiff);
+  if (/\.svg$/i.test(file.name) && file.type !== 'image/svg+xml') {
+    return file.slice(0, file.size, 'image/svg+xml');
   }
   if (/ftyp(heic|heix|hevc|hevx|mif1|msf1|avif|avis)/.test(signature) ||
       /\.(heic|heif|avif)$/i.test(file.name) || /image\/(heic|heif|avif)/.test(file.type)) {
@@ -107,12 +227,19 @@ export async function prepareImage(file) {
   let source = file;
   let decoded;
   try {
-    try {
-      decoded = await decodeBlob(source);
-    } catch {
-      source = await fallbackSource(file);
-      decoded = await decodeBlob(source);
+    const signature = String.fromCharCode(...new Uint8Array(await file.slice(0, 32).arrayBuffer()));
+    const tiff = /^(II\*\x00|MM\x00\*)/.test(signature) ? await readTiff(file) : null;
+    if (tiff?.rawChroma) {
+      // Some native TIFF decoders swap the red and blue channels for raw YCbCr.
+      source = await decodeTiff(tiff);
+    } else {
+      try {
+        decoded = await decodeBlob(source);
+      } catch {
+        source = await fallbackSource(file, signature, tiff);
+      }
     }
+    if (!decoded) decoded = await decodeBlob(source);
   } catch {
     throw new Error('Could not open this image. Check the file or try saving it as JPG or PNG.');
   }
@@ -138,6 +265,44 @@ function encodingPreset(item, mode, total) {
   return QUALITY;
 }
 
+// Only reuse a baseline JFIF stream with no EXIF, color profile, embedded
+// thumbnail, comments, or trailing data. Other JPEGs go through the canvas.
+async function isPlainJpeg(blob, width, height) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const view = new DataView(bytes.buffer);
+  const jfif = bytes.length >= 22 && view.getUint32(0) === 0xffd8ffe0 &&
+    view.getUint16(4) === 16 && view.getUint32(6) === 0x4a464946 &&
+    bytes[10] === 0 && view.getUint16(18) === 0;
+  if (!jfif) return false;
+
+  let frame = false;
+  for (let offset = 20; offset + 4 <= bytes.length;) {
+    const marker = view.getUint16(offset);
+    const length = view.getUint16(offset + 2);
+    if (length < 2 || offset + 2 + length > bytes.length) return false;
+    if (marker === 0xffc0) {
+      if (length < 8 || bytes[offset + 4] !== 8 ||
+          view.getUint16(offset + 5) !== height || view.getUint16(offset + 7) !== width ||
+          ![1, 3].includes(bytes[offset + 9])) return false;
+      frame = true;
+    } else if (marker === 0xffda && frame) {
+      // An entropy-coded scan can contain escaped FF bytes and restart markers.
+      let next = bytes.indexOf(0xff, offset + 2 + length);
+      while (next !== -1) {
+        const code = bytes[next + 1];
+        if (code === 0xd9) return next + 2 === bytes.length;
+        if (code !== 0 && !(code >= 0xd0 && code <= 0xd7)) return false;
+        next = bytes.indexOf(0xff, next + 2);
+      }
+      return false;
+    } else if (![0xffc4, 0xffdb, 0xffdd].includes(marker)) {
+      return false;
+    }
+    offset += 2 + length;
+  }
+  return false;
+}
+
 async function encodeForPdf(item, preset) {
   const decoded = await decodeBlob(item.source);
   let canvas;
@@ -148,6 +313,11 @@ async function encodeForPdf(item, preset) {
     if (isGraphic && preset === QUALITY) return await canvasBlob(canvas, 'image/png');
 
     const jpeg = await canvasBlob(canvas, 'image/jpeg', preset.jpeg);
+    const isJpeg = item.type === 'image/jpeg' || /\.(jpe?g|jfif)$/i.test(item.name);
+    if (isJpeg && item.source.size < jpeg.size && canvas.width === item.width &&
+        canvas.height === item.height && await isPlainJpeg(item.source, item.width, item.height)) {
+      return item.source.slice(0, item.source.size, 'image/jpeg');
+    }
     if (isGraphic && jpeg.size > item.size) {
       const png = await canvasBlob(canvas, 'image/png');
       if (png.size <= jpeg.size) return png;

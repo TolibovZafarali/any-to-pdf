@@ -49,7 +49,7 @@
           <ol id="queue" class="queue" aria-label="Images in PDF page order" hidden></ol>
           <div class="format-line">
             <span>JPG, PNG, WebP, HEIC <span class="format-extra">and more</span></span>
-            <button id="formats-button" type="button" aria-label="See all supported formats">All formats <span aria-hidden="true">↗</span></button>
+            <button id="formats-button" type="button">All formats <span aria-hidden="true">↗</span></button>
           </div>
         </section>
         <section class="export-section" aria-labelledby="settings-heading">
@@ -70,6 +70,7 @@
           </div>
           <p class="field-hint" id="compression-hint">Compresses large images automatically.</p>
           <button id="convert" class="button convert" type="button" disabled><i data-icon="download"></i><span>Download PDF</span></button>
+          <p id="export-error" class="export-error" role="alert" hidden></p>
           <div id="result" class="result" hidden>
             <div class="result-heading"><i data-icon="success"></i><strong id="result-name" dir="auto"></strong></div>
             <p id="result-detail"></p><a id="download"><i data-icon="download"></i>Download again</a>

@@ -71,7 +71,9 @@ h1 em { color: var(--accent); font-weight: 400; letter-spacing: -.05em; }
 .workspace { align-items: start; }
 .source-section, .export-section { min-width: 0; border-top: 2px solid var(--ink); }
 .source-section { container-type: inline-size; }
-.export-section { position: sticky; top: 24px; }
+@media (min-width: 761px) and (min-height: 600px) {
+  .export-section { position: sticky; top: 24px; }
+}
 .section-heading { min-height: 59px; padding-block: 13px; justify-content: space-between; gap: 12px; }
 .section-heading h2 { font-size: 19px; font-weight: 625; letter-spacing: -.045em; line-height: 1.2; }
 .inventory { font: 11px/1.4 var(--mono); color: var(--subtle); text-align: right; }
@@ -139,6 +141,7 @@ kbd { font: 10px/1.5 var(--mono); color: #636358; white-space: nowrap; }
 .convert { width: 100%; min-height: 46px; margin-top: 23px; font-size: 14px; background: var(--accent); color: white; }
 .convert:hover:enabled { background: #993a24; }
 .convert:disabled { background: #dfded5; color: #69695f; }
+.export-error { margin-top: 10px; color: #8a351e; font-size: 13px; overflow-wrap: anywhere; }
 .drop-zone.compact { grid-template-columns: 1fr; min-height: 85px; padding: 16px 22px; }
 .compact .crop-marks, .compact #artwork, .compact .drop-hint { display: none; }
 .compact .drop-content { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
@@ -213,7 +216,7 @@ dialog::backdrop { background: #27251c55; }
   .intro p { margin-top: 11px; font-size: 15px; padding: 0; }
   .intro br { display: none; }
   .source-section:has(.compact) .export-jump { display: inline-flex; align-items: center; min-height: 30px; padding-left: 10px; border-left: 1px solid var(--rule); font-size: 12px; text-underline-offset: 3px; }
-  .export-section { position: static; margin-top: 23px; }
+  .export-section { margin-top: 23px; }
   .section-heading { min-height: 50px; }
   .queue { grid-template-columns: repeat(auto-fill, minmax(min(100%, 151px), 1fr)); }
 }

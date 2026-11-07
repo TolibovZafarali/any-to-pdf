@@ -36,9 +36,11 @@ const filename = byId('filename');
 const pageSize = byId('page-size');
 const compression = byId('compression');
 const download = byId('download');
+const exportError = byId('export-error');
 const items = [];
 const waiting = [];
 let preparing = false;
+let clipboardPending = false;
 let exporting = false;
 let filenameEdited = false;
 let resultUrl;
@@ -50,7 +52,7 @@ function formatSize(bytes) {
 }
 function filenameStem(value) {
   const clean = value.normalize('NFC').trim()
-    .replace(/[<>:"/\\|?*\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '-');
+    .replace(/[<>:"/\\|?*\p{Cc}\p{Cf}\p{Cs}\p{Noncharacter_Code_Point}]/gu, '-');
   const encoder = new TextEncoder();
   let stem = '';
   let bytes = 0;
@@ -74,6 +76,7 @@ function updateDownloadName() {
 function announce(text) { byId('live-status').textContent = text; }
 function clearResult() {
   byId('result').hidden = true;
+  exportError.hidden = true;
   if (resultUrl) URL.revokeObjectURL(resultUrl);
   resultUrl = undefined;
   download.removeAttribute('href');
@@ -84,7 +87,9 @@ function showMessage(message) {
 }
 
 function updateControls() {
-  convert.disabled = !items.length || preparing || exporting;
+  const importing = clipboardPending || preparing;
+  convert.disabled = !items.length || importing || exporting;
+  byId('result').hidden = !resultUrl || importing;
   pageSize.disabled = compression.disabled = filename.disabled = exporting;
   chooseButton.disabled = pasteButton.disabled = exporting;
   chooseButton.querySelector('span').textContent = preparing ? 'Preparing images…' : 'Choose images';
@@ -93,7 +98,8 @@ function updateControls() {
   byId('image-count').textContent = items.length + (items.length === 1 ? ' image' : ' images');
   queue.hidden = !items.length;
   const inputSize = items.reduce((total, item) => total + item.size, 0);
-  byId('convert-hint').textContent = items.length ? pageCount(items.length) + ' · ' + formatSize(inputSize) : '0 pages';
+  const summary = items.length ? pageCount(items.length) + ' · ' + formatSize(inputSize) : '0 pages';
+  byId('convert-hint').textContent = clipboardPending ? 'Reading clipboard…' : summary;
 }
 
 async function addFiles(files) {
@@ -209,9 +215,18 @@ queue.addEventListener('click', event => {
   }
 });
 
-wireIntake({ dropZone, input, pasteButton, onFiles: addFiles, onMessage: showMessage });
+wireIntake({
+  dropZone, input, pasteButton, onFiles: addFiles, onMessage: showMessage,
+  onClipboardPending(pending) {
+    clipboardPending = pending;
+    updateControls();
+  },
+});
 chooseButton.addEventListener('click', () => input.click());
-byId('dismiss-message').addEventListener('click', () => { byId('message').hidden = true; });
+byId('dismiss-message').addEventListener('click', () => {
+  byId('message').hidden = true;
+  chooseButton.focus();
+});
 pageSize.addEventListener('change', clearResult);
 compression.addEventListener('change', () => {
   clearResult();
@@ -231,7 +246,12 @@ filename.addEventListener('blur', () => {
 
 convert.addEventListener('click', async () => {
   if (convert.disabled) return;
-  clearResult();
+  if (resultUrl) {
+    updateDownloadName();
+    download.click();
+    return;
+  }
+  exportError.hidden = true;
   exporting = true;
   updateControls();
   refreshRows();
@@ -252,7 +272,8 @@ convert.addEventListener('click', async () => {
     download.click();
     announce('Your PDF is ready. ' + pageCount(items.length) + ', ' + formatSize(blob.size) + '.');
   } catch (error) {
-    showMessage('Could not create the PDF. ' + error.message);
+    exportError.textContent = 'Could not create the PDF. ' + error.message;
+    exportError.hidden = false;
   } finally {
     exporting = false;
     convertText.textContent = 'Download PDF';

@@ -20,8 +20,17 @@ npm run preview
 
 The `dist/` directory is a standalone static site. It can be served at a domain root or a subpath. Fonts, artwork, the PDF library, and image decoders ship with the build. The clipboard button works on localhost or HTTPS when the browser allows clipboard access. The standard paste shortcut also accepts copied images.
 
+## Test
+
+Install the test browser once, then run the browser regression tests against the production build.
+
+```sh
+npx playwright install --only-shell chromium
+npm test
+```
+
 ## Images and compression
 
-JPG, JPEG, PNG, WebP, GIF, BMP, SVG, AVIF, and other browser-decodable images are supported. Bundled decoders handle HEIC, HEIF, and TIFF when the browser cannot decode them directly. Each input contributes one still image. Transparent areas render on white.
+JPG, JPEG, PNG, WebP, GIF, BMP, SVG, AVIF, and other browser-decodable images are supported. Bundled decoders add support for common HEIC, HEIF, and TIFF encodings. If an image cannot be opened, Paperfold reports its name and continues with the remaining images. Each input contributes one still image. Transparent areas render on white.
 
 Automatic compression reduces large images when a file reaches 2 MiB or 10 megapixels, or the selection totals 8 MiB. Smaller file reduces resolution and JPEG quality further. High quality keeps more detail. The resulting size depends on the image content.
