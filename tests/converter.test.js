@@ -87,6 +87,40 @@ test('a failed export can be retried and the resulting PDF downloaded under a ne
   assert.deepEqual(letter.getPage(0).getSize(), { width: 792, height: 612 });
 });
 
+test('clearing all images starts a fresh batch with the chosen export settings', async () => {
+  const clear = page.getByRole('button', { name: 'Clear all', exact: true });
+  const input = page.locator('#image-input');
+  const filename = page.getByLabel('Save PDF as');
+  const size = page.getByLabel('Page size');
+  const compression = page.getByLabel('Compression');
+  const convert = page.locator('#convert');
+  assert(await clear.isHidden());
+
+  await input.setInputFiles([{ ...svg, name: 'First.svg' }, svg]);
+  await filename.fill('Old batch');
+  await size.selectOption('letter');
+  await compression.selectOption('small');
+  await downloadFrom(convert, 'Old batch.pdf');
+  await clear.click();
+
+  assert.equal(await page.locator('.image-row').count(), 0);
+  assert.equal(await page.locator('#image-count').textContent(), '0 images');
+  assert.equal(await page.locator('#convert-hint').textContent(), '0 pages');
+  assert.equal(await filename.inputValue(), '');
+  assert.equal(await size.inputValue(), 'letter');
+  assert.equal(await compression.inputValue(), 'small');
+  assert(await clear.isHidden());
+  assert(await convert.isDisabled());
+  assert(await page.locator('#download').isHidden());
+  assert.equal(await page.locator('#download').getAttribute('href'), null);
+  assert(await page.locator('#choose').evaluate(button => document.activeElement === button));
+
+  await input.setInputFiles(svg);
+  const pdf = await PDFDocument.load(await downloadFrom(convert, 'Sample.pdf'));
+  assert.equal(pdf.getPageCount(), 1);
+  assert(await clear.isVisible());
+});
+
 test('paste respects the filename editor and open dialogs', async () => {
   async function pasteOn(selector) {
     return page.locator(selector).evaluate(target => {
@@ -128,10 +162,12 @@ test('downloading waits for pending clipboard images and recovers from denial', 
   const paste = page.locator('#paste');
   await paste.click();
   assert(await convert.isDisabled());
+  assert(await page.locator('#clear-all').isDisabled());
   assert(await page.locator('#download').isHidden());
   await page.evaluate(() => window.denyPaste());
   await page.locator('#message').waitFor();
   assert(await convert.isEnabled());
+  assert(await page.locator('#clear-all').isEnabled());
   assert(await page.locator('#download').isVisible());
 
   await paste.click();

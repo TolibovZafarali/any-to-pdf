@@ -77,7 +77,11 @@ h1 em { color: var(--accent); font-weight: 400; letter-spacing: -.05em; }
 .section-heading { min-height: 59px; padding-block: 13px; justify-content: space-between; gap: 12px; }
 .section-heading h2 { font-size: 19px; font-weight: 625; letter-spacing: -.045em; line-height: 1.2; }
 .inventory { font: 11px/1.4 var(--mono); color: var(--subtle); text-align: right; }
-.source-summary { display: flex; align-items: center; gap: 10px; }
+.source-section .section-heading { flex-wrap: wrap; row-gap: 2px; }
+.source-summary { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.clear-all { min-height: 30px; padding-inline: 4px; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
+.clear-all:hover:enabled { color: var(--accent); }
+.clear-all:disabled { color: var(--subtle); }
 .export-jump { display: none; }
 .drop-zone {
   position: relative;

@@ -30,6 +30,7 @@ const dropZone = byId('drop-zone');
 const chooseButton = byId('choose');
 const pasteButton = byId('paste');
 const input = byId('image-input');
+const clearAll = byId('clear-all');
 const convert = byId('convert');
 const convertText = convert.querySelector('span');
 const filename = byId('filename');
@@ -88,6 +89,8 @@ function showMessage(message) {
 
 function updateControls() {
   const importing = clipboardPending || preparing;
+  clearAll.hidden = !items.length;
+  clearAll.disabled = importing || exporting;
   convert.disabled = !items.length || importing || exporting;
   byId('result').hidden = !resultUrl || importing;
   pageSize.disabled = compression.disabled = filename.disabled = exporting;
@@ -213,6 +216,19 @@ queue.addEventListener('click', event => {
   if (action !== 'remove') {
     (button.disabled ? row.querySelector('button:not(:disabled)') : button)?.focus();
   }
+});
+
+clearAll.addEventListener('click', () => {
+  for (const item of items) URL.revokeObjectURL(item.thumbnail);
+  items.length = 0;
+  queue.replaceChildren();
+  clearResult();
+  filename.value = '';
+  filenameEdited = false;
+  byId('message').hidden = true;
+  updateControls();
+  chooseButton.focus();
+  announce('All images cleared.');
 });
 
 wireIntake({
