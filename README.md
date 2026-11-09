@@ -34,3 +34,23 @@ npm test
 JPG, JPEG, PNG, WebP, GIF, BMP, SVG, AVIF, and other browser-decodable images are supported. Bundled decoders add support for common HEIC, HEIF, and TIFF encodings. If an image cannot be opened, Paperfold reports its name and continues with the remaining images. Each input contributes one still image. Transparent areas render on white.
 
 Automatic compression reduces large images when a file reaches 2 MiB or 10 megapixels, or the selection totals 8 MiB. Smaller file reduces resolution and JPEG quality further. High quality keeps more detail. The resulting size depends on the image content.
+
+## Folio reading library — `/books`
+
+`/books` is an independent reading app. Its password is **`kalimdor123`**. This is a client-side convenience gate, not authentication: the password ships in JavaScript and the PDF URLs are publicly accessible. Do not use it to protect confidential books.
+
+The included book is *Animal Farm* by George Orwell (71 PDF pages). PDF.js renders books inside the site, including selectable text, page navigation, and zoom. Current page and reading/finished status are stored in `localStorage` under `folio.reading.v1`; unlocking lasts for the current tab’s session. Clearing browser data removes progress. No accounts, backend, database, or external PDF viewer is used.
+
+To add a book:
+
+1. Put its PDF and cover image in `public/books/`.
+2. Add an entry to `src/books/catalog.js` with a unique, stable `id`, `title`, `author`, `year`, `genre`, `file`, `cover`, and `description`. The `file` and `cover` values are filenames relative to `public/books/`.
+3. Run `npm run build` and deploy `dist/`. Changing a book’s ID resets its association with saved progress.
+
+`npm run dev` and `npm run build` copy PDF.js fonts, character maps, and WebAssembly resources from the installed package to the ignored `public/pdfjs/` directory. They ship with the site; reading makes no third-party requests. `dist/books/index.html` is the library entry point. Serve `/books` as that directory (or redirect to `/books/`) on your static host; avoid rewriting this route to the converter’s root `index.html`.
+
+Browser tests cover unlocking, PDF rendering, page restoration, finished status, and the original converter. Run `npm test` with the installed Playwright browser. In this cloud environment, the installed system Chromium can be used via:
+
+```sh
+NODE_OPTIONS='--import=/workspace/setup/any-to-pdf/system-chromium.mjs' npm test
+```
