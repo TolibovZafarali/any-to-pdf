@@ -28,10 +28,31 @@
     </section>
   </main>
   <footer class="site-footer shell"><span>Made for the joy of reading.</span><span>YOUR BOOKS. YOUR PACE.</span></footer>
-  <dialog id="reader" class="reader" aria-labelledby="reader-title">
-    <header class="reader-header"><button id="close-reader" class="quiet-button"><i data-icon="arrow-left"></i>Back to library</button><div class="reader-heading"><h2 id="reader-title"></h2><p id="reader-author"></p></div><span class="reader-brand">folio.</span></header>
-    <div class="reader-toolbar"><div class="page-controls"><button id="previous-page" class="icon-button" aria-label="Previous page"><i data-icon="chevron-left"></i></button><label for="page-number">Page</label><input id="page-number" type="number" min="1" value="1" aria-label="Page"><span class="page-total" id="page-total"></span><button id="next-page" class="icon-button" aria-label="Next page"><i data-icon="chevron-right"></i></button></div><div class="zoom-controls"><button id="zoom-out" class="icon-button" aria-label="Zoom out"><i data-icon="minus"></i></button><span id="zoom-label">100%</span><button id="zoom-in" class="icon-button" aria-label="Zoom in"><i data-icon="plus"></i></button><button id="fit-page" class="quiet-button">Fit width</button></div></div>
-    <div class="reader-layout" id="reader-scroll"><div class="page-stage"><p id="reader-message" role="status">Opening your book…</p><button id="retry-book" class="primary" hidden>Try again</button><div class="pdf-page" id="pdf-page" hidden><canvas id="pdf-canvas" aria-label="Book page"></canvas><div id="pdf-text" class="textLayer"></div></div></div></div>
+  <dialog id="reader" class="reader" aria-label="Document workspace">
+    <header class="reader-header">
+      <div class="workspace-identity"><i data-icon="panels"></i><div><strong>Workspace</strong><small>Documents</small></div></div>
+      <div class="workspace-path">Documents <span>/</span> Reference</div>
+      <button id="close-reader" class="quiet-button" aria-label="Back to library"><i data-icon="close"></i>Close document</button>
+    </header>
+    <div class="document-tabbar"><div class="document-tab"><i data-icon="file-text"></i><span>Reference document</span><small>PDF</small></div><span id="document-state" class="document-state">Local progress</span></div>
+    <div class="reader-toolbar">
+      <div class="page-controls"><button id="previous-page" class="icon-button" aria-label="Previous page"><i data-icon="chevron-left"></i></button><label for="page-number">Page</label><input id="page-number" type="number" min="1" value="1" aria-label="Page"><span class="page-total" id="page-total"></span><button id="next-page" class="icon-button" aria-label="Next page"><i data-icon="chevron-right"></i></button></div>
+      <div class="view-controls" role="group" aria-label="View mode"><button id="text-view" aria-pressed="true"><i data-icon="align-left"></i>Text</button><button id="original-view" aria-pressed="false"><i data-icon="file-text"></i>PDF</button></div>
+      <div class="zoom-controls"><button id="zoom-out" class="icon-button" aria-label="Zoom out"><i data-icon="minus"></i></button><span id="zoom-label">100%</span><button id="zoom-in" class="icon-button" aria-label="Zoom in"><i data-icon="plus"></i></button><button id="fit-page" class="quiet-button">Fit width</button></div>
+    </div>
+    <div class="reader-body">
+      <aside class="document-sidebar" aria-label="Document navigation">
+        <p class="sidebar-label">DOCUMENT</p><div class="sidebar-document"><i data-icon="file-text"></i>Reference document</div>
+        <div class="sidebar-section"><p class="sidebar-label">PAGES</p><nav id="page-list" class="page-list" aria-label="Nearby pages"></nav></div>
+        <details class="sidebar-section"><summary class="sidebar-label">Document details</summary><dl class="document-details"><dt>Title</dt><dd id="reader-title"></dd><dt>Author</dt><dd id="reader-author"></dd><dt>Format</dt><dd>PDF document</dd></dl></details>
+        <p class="sidebar-note">Use ← and → to navigate pages.</p>
+      </aside>
+      <div class="reader-layout" id="reader-scroll"><div class="page-stage">
+        <p id="reader-message" role="status">Opening document…</p><button id="retry-book" class="primary" hidden>Try again</button>
+        <article id="document-text" class="document-text" aria-label="Document text" hidden><div class="document-page-label"><span id="text-page-label">REFERENCE / PAGE 1</span><span>Text view · simplified layout</span></div><div id="document-lines" class="document-lines"></div></article>
+        <div class="pdf-page" id="pdf-page" hidden><canvas id="pdf-canvas" aria-label="Document page"></canvas><div id="pdf-text" class="textLayer"></div></div>
+      </div></div>
+    </div>
     <footer class="reader-footer"><span id="reader-progress-label" class="reader-progress-label"></span><progress id="reader-progress" max="100" value="0" aria-label="Reading progress"></progress><button id="finish-reading" class="text-button">Mark as finished<i data-icon="check"></i></button></footer>
   </dialog>
   <p id="storage-message" class="toast" role="status" hidden></p>

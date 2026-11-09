@@ -62,6 +62,8 @@ test('the bundled PDF renders inside the reader and progress survives a reload',
   await unlock();
   const pdfResponse = page.waitForResponse(response => response.url().includes('/books/orwellanimalfarm.pdf') && response.ok());
   await openBook();
+  await page.getByRole('button', { name: 'PDF', exact: true }).click();
+  assert(await page.locator('#pdf-canvas').isVisible());
   assert.match((await (await pdfResponse).body()).subarray(0, 5).toString(), /^%PDF-/);
   assert(await page.getByRole('button', { name: 'Previous page', exact: true }).isDisabled());
   await page.getByRole('button', { name: 'Next page', exact: true }).click();
@@ -82,6 +84,41 @@ test('the bundled PDF renders inside the reader and progress survives a reload',
   if (await page.getByLabel('Password', { exact: true }).isVisible()) await unlock();
   await openBook();
   assert.equal(await page.getByLabel('Page', { exact: true }).inputValue(), '5');
+});
+
+test('the document workspace switches views without losing the page and supports readable text zoom', async () => {
+  await unlock();
+  const libraryTitle = await page.title();
+  await openBook();
+  assert.equal(await page.title(), 'Document workspace');
+  assert.equal(await page.getByRole('button', { name: 'Text', exact: true }).getAttribute('aria-pressed'), 'true');
+  assert(await page.locator('#document-text').isVisible());
+  assert(await page.locator('#pdf-canvas').isHidden());
+  assert.match(await page.locator('#document-lines').textContent(), /Manor Farm/);
+
+  await page.getByRole('button', { name: 'PDF', exact: true }).click();
+  assert(await page.locator('#pdf-canvas').isVisible());
+  assert(await page.locator('#document-text').isHidden());
+  await page.getByRole('button', { name: 'Next page', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#pdf-canvas')?.dataset.page === '2' && document.querySelector('#reader')?.getAttribute('aria-busy') === 'false');
+  await page.getByRole('button', { name: 'Text', exact: true }).click();
+  assert.equal(await page.getByLabel('Page', { exact: true }).inputValue(), '2');
+  assert.equal(await page.locator('#document-text').getAttribute('data-page'), '2');
+  assert.match(await page.locator('#document-lines').textContent(), /cart-horses/);
+
+  const paragraph = page.locator('#document-lines p').first();
+  const beforeZoom = await paragraph.evaluate(element => parseFloat(getComputedStyle(element).fontSize));
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await page.waitForFunction(previous => {
+    const paragraph = document.querySelector('#document-lines p');
+    return paragraph && parseFloat(getComputedStyle(paragraph).fontSize) > previous && document.querySelector('#reader')?.getAttribute('aria-busy') === 'false';
+  }, beforeZoom);
+  assert.equal(await page.getByLabel('Page', { exact: true }).inputValue(), '2');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth && document.querySelector('#document-text').getBoundingClientRect().right <= innerWidth);
+  await page.getByRole('button', { name: 'Back to library', exact: true }).click();
+  assert.equal(await page.title(), libraryTitle);
 });
 
 test('finished status persists and the shelf filters reflect it', async () => {

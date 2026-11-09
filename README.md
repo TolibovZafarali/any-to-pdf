@@ -41,6 +41,8 @@ Automatic compression reduces large images when a file reaches 2 MiB or 10 megap
 
 The included book is *Animal Farm* by George Orwell (71 PDF pages). PDF.js renders books inside the site, including selectable text, page navigation, and zoom. Current page and reading/finished status are stored in `localStorage` under `folio.reading.v1`; unlocking lasts for the current tab’s session. Clearing browser data removes progress. No accounts, backend, database, or external PDF viewer is used.
 
+The reader uses a full-screen document workspace with neutral toolbars and a page sidebar. Text view presents extracted PDF text in reflowed sans-serif paragraphs by default; PDF view preserves the original page layout. Both share the same page and saved progress. Scanned pages without selectable text can be read in PDF view. Book details are available in the sidebar, and the browser tab is titled “Document workspace” while the reader is open.
+
 To add a book:
 
 1. Put its PDF and cover image in `public/books/`.

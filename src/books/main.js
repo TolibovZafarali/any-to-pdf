@@ -1,8 +1,8 @@
-import { createElement, BookOpen, Leaf, Lock, Eye, EyeOff, Bookmark, ArrowRight, ArrowLeft, Search, ChevronLeft, ChevronRight, Minus, Plus, Check } from 'lucide';
+import { createElement, BookOpen, Leaf, Lock, Eye, EyeOff, Bookmark, ArrowRight, ArrowLeft, Search, ChevronLeft, ChevronRight, Minus, Plus, Check, PanelsTopLeft, FileText, AlignLeft, X } from 'lucide';
 import { books } from './catalog.js';
 import './style.css';
 
-const icons = { 'book-open': BookOpen, leaf: Leaf, lock: Lock, eye: Eye, 'eye-off': EyeOff, bookmark: Bookmark, 'arrow-right': ArrowRight, 'arrow-left': ArrowLeft, search: Search, 'chevron-left': ChevronLeft, 'chevron-right': ChevronRight, minus: Minus, plus: Plus, check: Check };
+const icons = { 'book-open': BookOpen, leaf: Leaf, lock: Lock, eye: Eye, 'eye-off': EyeOff, bookmark: Bookmark, 'arrow-right': ArrowRight, 'arrow-left': ArrowLeft, search: Search, 'chevron-left': ChevronLeft, 'chevron-right': ChevronRight, minus: Minus, plus: Plus, check: Check, panels: PanelsTopLeft, 'file-text': FileText, 'align-left': AlignLeft, close: X };
 const $ = id => document.getElementById(id);
 function decorate(root = document) {
   for (const node of root.querySelectorAll('[data-icon]')) node.replaceWith(createElement(icons[node.dataset.icon], { width: 18, height: 18, 'aria-hidden': 'true', 'stroke-width': 1.7 }));
@@ -105,6 +105,8 @@ $('clear-filters').addEventListener('click', () => { $('book-search').value = ''
 let pdfjs, documentTask, pdf, activeBook, currentPage = 1, zoom = 1, renderTask, textTask;
 let generation = 0, renderVersion = 0;
 let readerOpener;
+let viewMode = 'text';
+const libraryTitle = document.title;
 const reader = $('reader');
 function setBusy(busy) {
   reader.setAttribute('aria-busy', String(busy));
@@ -115,16 +117,20 @@ function setBusy(busy) {
   $('zoom-out').disabled = busy || !pdf || zoom <= 0.6;
   $('fit-page').disabled = busy || !pdf;
   $('finish-reading').disabled = busy || !pdf;
+  $('text-view').disabled = $('original-view').disabled = busy || !pdf;
+  for (const button of $('page-list').querySelectorAll('button')) button.disabled = busy;
 }
 async function openBook(book) {
   if (!book) return;
   readerOpener = document.activeElement;
   activeBook = book; pdf = null; zoom = 1;
+  document.title = 'Document workspace';
   const token = ++generation;
   $('reader-title').textContent = book.title; $('reader-author').textContent = book.author;
-  $('pdf-page').hidden = true; $('reader-message').hidden = false; $('retry-book').hidden = true;
-  $('reader-message').textContent = 'Opening your book…';
-  $('reader-progress-label').textContent = 'Your next chapter is on its way'; $('reader-progress').value = 0;
+  $('pdf-page').hidden = $('document-text').hidden = true; $('reader-message').hidden = false; $('retry-book').hidden = true;
+  $('page-list').replaceChildren();
+  $('reader-message').textContent = 'Opening document…';
+  $('reader-progress-label').textContent = 'Loading document'; $('reader-progress').value = 0;
   $('page-total').textContent = ''; $('page-number').value = 1; $('zoom-label').textContent = '100%';
   if (!reader.open) reader.showModal();
   document.body.style.overflow = 'hidden'; setBusy(true);
@@ -152,7 +158,7 @@ async function renderPage(number, resetScroll = true) {
   renderTask?.cancel(); textTask?.cancel();
   setBusy(true);
   $('reader-message').textContent = 'Preparing your page…'; $('reader-message').hidden = false;
-  $('pdf-page').hidden = true;
+  $('pdf-page').hidden = $('document-text').hidden = true;
   try {
     const page = await pdf.getPage(number);
     if (token !== generation || version !== renderVersion) return;
@@ -177,12 +183,15 @@ async function renderPage(number, resetScroll = true) {
     await textTask.render();
     if (token !== generation || version !== renderVersion) return;
     currentPage = number;
+    renderDocumentText(textContent.items, number);
+    renderPageList();
     canvas.dataset.page = String(number); canvas.setAttribute('aria-label', `${activeBook.title}, page ${number} of ${pdf.numPages}`);
     $('page-number').value = number; $('zoom-label').textContent = `${Math.round(zoom * 100)}%`;
     const previous = records[activeBook.id];
     records[activeBook.id] = { page: number, total: pdf.numPages, status: previous?.status === 'finished' ? 'finished' : 'reading', lastRead: Date.now() }; save();
     updateReaderProgress();
-    $('reader-message').hidden = true; $('pdf-page').hidden = false; $('retry-book').hidden = true;
+    $('reader-message').hidden = true; $('retry-book').hidden = true;
+    applyViewMode();
     if (resetScroll) $('reader-scroll').scrollTo({ top: 0, left: 0 });
   } catch (error) {
     if (token !== generation || version !== renderVersion || error.name === 'RenderingCancelledException' || error.name === 'AbortException') return;
@@ -191,9 +200,83 @@ async function renderPage(number, resetScroll = true) {
     $('reader-message').hidden = false; $('retry-book').hidden = false;
   } finally { if (token === generation && version === renderVersion) setBusy(false); }
 }
+function renderDocumentText(items, number) {
+  // Join fragments on the same baseline, then use paragraph spacing from the
+  // source PDF. Keep all text, including headings and footers, in source order.
+  const lines = [];
+  let line;
+  for (const item of items) {
+    if (typeof item.str !== 'string' || !item.str.trim()) continue;
+    const y = item.transform[5];
+    const height = Math.abs(item.height || item.transform[3]) || 12;
+    if (!line || Math.abs(line.y - y) > Math.max(2, height * 0.25)) {
+      line = { text: item.str, y, height }; lines.push(line);
+    } else {
+      line.text += `${/\s$/.test(line.text) || /^\s/.test(item.str) ? '' : ' '}${item.str}`;
+    }
+    if (item.hasEOL) line = null;
+  }
+  const gaps = lines.slice(1).map((entry, i) => Math.abs(lines[i].y - entry.y)).filter(gap => gap > 2).sort((a, b) => a - b);
+  const leading = gaps[Math.floor(gaps.length / 2)] || 16;
+  const paragraphs = [];
+  for (const [index, entry] of lines.entries()) {
+    const previous = lines[index - 1];
+    if (!previous || Math.abs(entry.y - previous.y) > leading * 1.35 || Math.abs(entry.height - previous.height) > 2) {
+      paragraphs.push(entry.text.trim());
+    } else paragraphs[paragraphs.length - 1] += ` ${entry.text.trim()}`;
+  }
+  $('document-lines').replaceChildren(...paragraphs.map(text => {
+    const paragraph = document.createElement('p');
+    paragraph.className = 'document-paragraph'; paragraph.dir = 'auto'; paragraph.textContent = text;
+    return paragraph;
+  }));
+  if (!paragraphs.length) {
+    const message = document.createElement('p');
+    message.textContent = 'No selectable text on this page. Use PDF view to see the original document.';
+    const button = document.createElement('button');
+    button.className = 'quiet-button'; button.textContent = 'Open PDF view';
+    button.addEventListener('click', () => { viewMode = 'pdf'; applyViewMode(); });
+    $('document-lines').append(message, button);
+  }
+  $('document-text').dataset.page = number;
+  $('text-page-label').textContent = `REFERENCE / PAGE ${number}`;
+}
+function renderPageList() {
+  const first = Math.max(1, Math.min(currentPage - 3, pdf.numPages - 6));
+  const numbers = new Set([1, ...Array.from({ length: Math.min(7, pdf.numPages) }, (_, i) => first + i), pdf.numPages]);
+  $('page-list').replaceChildren();
+  let previous = 0;
+  for (const number of [...numbers].sort((a, b) => a - b)) {
+    if (previous && number - previous > 1) {
+      const dots = document.createElement('span'); dots.className = 'page-gap'; dots.textContent = '…'; dots.setAttribute('aria-hidden', 'true');
+      $('page-list').append(dots);
+    }
+    const button = document.createElement('button');
+    button.type = 'button'; button.dataset.pageJump = number;
+    button.textContent = `Page ${String(number).padStart(2, '0')}`;
+    button.setAttribute('aria-label', `Page ${number}`);
+    if (number === currentPage) button.setAttribute('aria-current', 'page');
+    $('page-list').append(button); previous = number;
+  }
+}
+function applyViewMode() {
+  $('document-text').hidden = viewMode !== 'text';
+  $('pdf-page').hidden = viewMode !== 'pdf';
+  $('text-view').setAttribute('aria-pressed', String(viewMode === 'text'));
+  $('original-view').setAttribute('aria-pressed', String(viewMode === 'pdf'));
+  $('document-lines').style.fontSize = `${14 * zoom}px`;
+}
+for (const [id, mode] of [['text-view', 'text'], ['original-view', 'pdf']]) {
+  $(id).addEventListener('click', () => { viewMode = mode; applyViewMode(); $('reader-scroll').scrollTo({ top: 0, left: 0 }); });
+}
+$('page-list').addEventListener('click', event => {
+  const button = event.target.closest('[data-page-jump]');
+  if (button && !button.disabled) renderPage(Number(button.dataset.pageJump));
+});
 function updateReaderProgress() {
   const r = records[activeBook.id];
-  $('reader-progress-label').textContent = `${!storageAvailable ? 'Progress not saved' : r.status === 'finished' ? 'Finished' : 'Your place is saved'} · ${percent(r)}%`;
+  $('reader-progress-label').textContent = `${!storageAvailable ? 'Position not saved' : r.status === 'finished' ? 'Completed' : 'Position saved'} · ${percent(r)}%`;
+  $('document-state').textContent = storageAvailable ? 'Position saved locally' : 'Position not saved';
   $('reader-progress').value = percent(r);
   $('finish-reading').textContent = r.status === 'finished' ? 'Mark as reading' : 'Mark as finished';
 }
@@ -202,6 +285,7 @@ function closeReader() {
   const task = documentTask; documentTask = null; pdf = null; activeBook = null;
   task?.destroy().catch(() => {});
   if (reader.open) reader.close();
+  document.title = libraryTitle;
   document.body.style.overflow = ''; renderLibrary();
   // Library rerender replaces book buttons, so find the corresponding action.
   const id = readerOpener?.closest('[data-read]')?.dataset.read;
