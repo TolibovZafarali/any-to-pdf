@@ -1,0 +1,140 @@
+name: Windows reader release
+
+on:
+  push:
+    tags:
+      - 'reader-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag, for example reader-v1.0.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-reader-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Test and package Windows x64
+    runs-on: windows-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Validate release tag
+        id: release
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^reader-v[0-9]+\.[0-9]+\.[0-9]+$') {
+            throw 'Use a stable reader-vX.Y.Z release tag.'
+          }
+          "tag=$env:RELEASE_TAG" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ steps.release.outputs.tag }}
+          persist-credentials: false
+
+      - name: Check package version matches tag
+        id: version
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          $version = (Get-Content desktop/package.json -Raw | ConvertFrom-Json).version
+          if ($env:RELEASE_TAG -cne "reader-v$version") {
+            throw "Tag $env:RELEASE_TAG does not match desktop/package.json version $version."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Test local library storage
+        working-directory: desktop
+        run: npm test
+
+      - name: Test desktop import and restart persistence
+        working-directory: desktop
+        run: npm run test:app
+
+      - name: Build portable Windows application
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run build
+
+      - name: Check release artifact and calculate checksum
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $filename = "Folio-Reader-$env:APP_VERSION-x64.exe"
+          $file = Get-Item "desktop/release/$filename" -ErrorAction Stop
+          if ($file.Length -lt 1MB) { throw 'Portable executable is unexpectedly small.' }
+          $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $filename" | Set-Content desktop/release/SHA256SUMS.txt -Encoding utf8NoBOM
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-reader
+          path: |
+            desktop/release/Folio-Reader-*-x64.exe
+            desktop/release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish downloadable application
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-reader
+          path: release
+
+      - name: Verify downloaded artifact
+        working-directory: release
+        run: sha256sum --check SHA256SUMS.txt
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          APP_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          A small, offline PDF reader for Windows 10/11 (64-bit).
+
+          Download the `.exe` asset and double-click it. No installation or account is required. Import your own PDFs, resize the window, and enable Always on top when needed. Imported files and reading positions are saved locally and restored when you reopen the app.
+
+          The application is unsigned. Windows may display a publisher or SmartScreen prompt; check that you downloaded it from this repository's release. `SHA256SUMS.txt` contains the download checksum.
+
+          Your library stays on your computer; there is no backend or cloud sync. The portable executable stores library data in the normal Windows application-data folder, not beside the executable.
+          NOTES
+          gh release create "$RELEASE_TAG" \
+            "release/Folio-Reader-$APP_VERSION-x64.exe" \
+            release/SHA256SUMS.txt \
+            --verify-tag \
+            --title "Folio Reader $APP_VERSION for Windows" \
+            --notes-file release-notes.md

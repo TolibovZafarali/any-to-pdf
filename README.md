@@ -2,6 +2,21 @@
 
 Paperfold turns images into a single PDF in the browser. Choose files, drag them in, or paste a copied image or screenshot. Reorder the previews to set the page order and choose between image-sized, A4, and US Letter pages. Enter a name under **Save PDF as**, or use the first image’s name. Paperfold adds the `.pdf` extension when you download. All processing takes place on the device. Reloading the page clears the queue.
 
+## Download the Windows reader
+
+**[Download Folio Reader for Windows (.exe)](https://github.com/TolibovZafarali/any-to-pdf/releases/download/reader-v1.0.0/Folio-Reader-1.0.0-x64.exe)** · [Release notes and checksum](https://github.com/TolibovZafarali/any-to-pdf/releases/tag/reader-v1.0.0)
+
+A standalone, offline PDF reading app for **Windows 10/11, 64-bit**. Download the portable executable and double-click it—no installation, account, or server required.
+
+- Click **Open PDF** to import your books. The app keeps its own local copies.
+- Resize the window to fit alongside your work, or use the **pin button** to keep it above other windows.
+- Switch between readable **Text** and original **PDF** views, adjust zoom, and jump to a page.
+- Reopen the app to return to your last book and page. The bookshelf, window size, and pin preference are remembered.
+
+Your PDFs and progress stay in `%APPDATA%\Folio Reader`. They are not uploaded. Moving the executable or original PDFs does not delete the library. This build is unsigned, so Windows may display an unknown-publisher or SmartScreen warning.
+
+[Desktop development and release instructions](desktop/README.md)
+
 ## Run locally
 
 Use Node.js 22.12 or newer.
