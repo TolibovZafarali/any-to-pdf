@@ -104,8 +104,48 @@ test('the installed Windows app keeps an existing portable library and enables i
     assert.equal(path.resolve(runtime.userData).toLowerCase(), path.resolve(profile).toLowerCase());
     assert.equal(path.basename(runtime.appPath), 'app.asar');
     const page = await application.firstWindow();
+    const startupErrors = [];
+    const recordError = (kind, message) => {
+      if (startupErrors.length < 20) startupErrors.push({ kind, message: String(message).slice(0, 2500) });
+    };
+    page.on('pageerror', error => recordError('pageerror', error.stack || error.message));
+    page.on('console', message => { if (message.type() === 'error') recordError('console', message.text()); });
     page.setDefaultTimeout(20_000);
-    await page.waitForFunction(() => document.querySelector('#reader')?.getAttribute('aria-busy') === 'false' && document.querySelector('#text-page')?.dataset.page === '7');
+    // firstWindow can arrive after initial renderer scripts have run. Reload
+    // with listeners attached so packaged startup failures are observable.
+    await page.reload();
+    try {
+      await page.waitForFunction(() => document.querySelector('#reader')?.getAttribute('aria-busy') === 'false' && document.querySelector('#text-page')?.dataset.page === '7');
+    } catch (error) {
+      const diagnostics = await page.evaluate(async () => {
+        const text = id => document.getElementById(id)?.textContent?.slice(0, 500) || '';
+        const state = {
+          notice: text('notice-text'),
+          loading: text('loading'),
+          saveStatus: text('save-status'),
+          bookTitle: text('book-title'),
+          readerBusy: document.getElementById('reader')?.getAttribute('aria-busy'),
+          renderedPage: document.getElementById('text-page')?.dataset.page,
+          desktopReaderType: typeof window.desktopReader,
+        };
+        if (typeof window.desktopReader?.getLibrary === 'function') {
+          let timer;
+          try {
+            const library = await Promise.race([
+              window.desktopReader.getLibrary(),
+              new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('getLibrary timed out')), 2000); }),
+            ]);
+            state.library = {
+              bookCount: library.books?.length,
+              hasActiveBook: Boolean(library.activeBookId && library.books?.some(book => book.id === library.activeBookId)),
+            };
+          } catch (failure) { state.libraryError = String(failure.message).slice(0, 1000); }
+          finally { clearTimeout(timer); }
+        }
+        return state;
+      }).catch(failure => ({ inspectionError: String(failure.message).slice(0, 1000) }));
+      throw new Error(`Installed renderer did not restore page 7: ${JSON.stringify({ ...diagnostics, startupErrors })}`, { cause: error });
+    }
     assert.equal(await page.getByLabel('Page', { exact: true }).inputValue(), '7');
     assert.equal(await page.locator('#book-title').textContent(), 'Animal Farm');
     assert.equal(await page.locator('#pin').getAttribute('aria-pressed'), 'true');

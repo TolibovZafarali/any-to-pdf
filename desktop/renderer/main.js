@@ -119,6 +119,7 @@ async function openBook(entry) {
     await renderPage(pageNumber);
   } catch (error) {
     if (token !== generation) return;
+    console.error('Unable to open PDF:', error);
     $('loading').textContent = error.name === 'PasswordException' ? 'This PDF is password-protected. Open an unprotected copy to read it here.' : 'This PDF could not be opened. It may be damaged or unavailable.';
     $('loading').hidden = false; $('retry').hidden = false;
     $('save-status').textContent = 'Couldn’t open PDF'; setBusy(false);
@@ -193,6 +194,7 @@ async function renderPage(number, resetScroll = true) {
     } catch { if (token === generation) { $('save-status').textContent = 'Position not saved'; notify('Your place could not be saved. Check that your app data folder is writable.'); } }
   } catch (error) {
     if (token !== generation || run !== revision || error.name === 'RenderingCancelledException') return;
+    console.error('Unable to render PDF page:', error);
     $('loading').textContent = 'This page couldn’t be displayed. Try another page or reopen the book.';
     $('loading').hidden = false; $('retry').hidden = false;
     $('page').value = pageNumber;
