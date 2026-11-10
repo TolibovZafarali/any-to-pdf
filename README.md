@@ -34,7 +34,3 @@ npm test
 JPG, JPEG, PNG, WebP, GIF, BMP, SVG, AVIF, and other browser-decodable images are supported. Bundled decoders add support for common HEIC, HEIF, and TIFF encodings. If an image cannot be opened, Paperfold reports its name and continues with the remaining images. Each input contributes one still image. Transparent areas render on white.
 
 Automatic compression reduces large images when a file reaches 2 MiB or 10 megapixels, or the selection totals 8 MiB. Smaller file reduces resolution and JPEG quality further. High quality keeps more detail. The resulting size depends on the image content.
-
-## Windows app transfer
-
-The standalone Windows reader is packaged in [windows-reader/](windows-reader/). [Download the complete source ZIP](https://github.com/TolibovZafarali/any-to-pdf/raw/refs/heads/main/windows-reader/folio-reader-source.zip) to move it to another repository. It includes its application code, dependencies lockfile, tests, test PDF, Windows release workflows, and instructions for Codex.
