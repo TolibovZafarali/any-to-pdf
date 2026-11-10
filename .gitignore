@@ -3,4 +3,3 @@ dist/
 .DS_Store
 .playwright-cli/
 output/playwright/
-public/pdfjs/
