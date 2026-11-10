@@ -1,3 +1,7 @@
+// Load the core exporter with the app so queued images can still be exported
+// if a deployment removes old asset URLs or the browser goes offline.
+import { PDFDocument } from 'pdf-lib';
+
 const MIB = 1024 * 1024;
 const PAPER = { a4: [595.28, 841.89], letter: [612, 792] };
 const QUALITY = { edge: 8192, pixels: 16_000_000, jpeg: 0.94 };
@@ -339,7 +343,6 @@ function pageDimensions(item, pageSize) {
 
 export async function exportPdf(items, { pageSize = 'fit', compression = 'auto' } = {}, onProgress) {
   if (!items.length) throw new Error('Add at least one image to create a PDF.');
-  const { PDFDocument } = await import('pdf-lib');
   const pdf = await PDFDocument.create();
   const total = items.reduce((sum, item) => sum + item.size, 0);
   for (const [index, item] of items.entries()) {

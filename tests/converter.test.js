@@ -176,6 +176,29 @@ test('downloading waits for pending clipboard images and recovers from denial', 
   assert.equal(pdf.getPageCount(), 2);
 });
 
+test('queued JPEGs export with their settings when the connection drops before download', async () => {
+  const buffer = await readFile(new URL('./fixtures/compressed.jpg', import.meta.url));
+  const names = Array.from({ length: 6 }, (_, index) => `Photo ${index + 1}.jpg`);
+  await page.locator('#image-input').setInputFiles(names.map(name => ({ name, mimeType: 'image/jpeg', buffer })));
+  await page.waitForFunction(() => document.querySelectorAll('.image-row').length === 6 && !document.querySelector('#convert').disabled);
+  await page.getByLabel('Save PDF as').fill('Travel album');
+  await page.getByLabel('Page size').selectOption('letter');
+  await page.getByLabel('Compression').selectOption('small');
+
+  // No export has warmed a module cache. A loaded converter must not need a
+  // late network request (or a reload that would discard this prepared queue).
+  await page.context().setOffline(true);
+  const bytes = await downloadFrom(page.locator('#convert'), 'Travel album.pdf');
+  const pdf = await PDFDocument.load(bytes);
+  assert.equal(pdf.getPageCount(), 6);
+  for (const pdfPage of pdf.getPages()) assert.deepEqual(pdfPage.getSize(), { width: 792, height: 612 });
+  assert.deepEqual(await page.locator('.image-detail strong').allTextContents(), names);
+  assert.equal(await page.getByLabel('Save PDF as').inputValue(), 'Travel album');
+  assert.equal(await page.getByLabel('Page size').inputValue(), 'letter');
+  assert.equal(await page.getByLabel('Compression').inputValue(), 'small');
+  assert(await page.locator('#export-error').isHidden());
+});
+
 test('a small baseline JPEG keeps its data while private JPEG comments are discarded', async () => {
   const original = await readFile(new URL('./fixtures/compressed.jpg', import.meta.url));
   const input = page.locator('#image-input');
