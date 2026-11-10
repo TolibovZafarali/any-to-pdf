@@ -1,17 +1,17 @@
 const { app, BrowserWindow, dialog, ipcMain, screen, Menu } = require('electron');
 const path = require('node:path');
-const { pathToFileURL } = require('node:url');
 const { LibraryStore } = require('./library.cjs');
 const { createUpdater } = require('./updates.cjs');
+const { createTrustedEntry, isTrustedSender } = require('./trusted-entry.cjs');
 
 app.setName('Folio Reader');
 let window, store, boundsTimer, closing = false;
 let updates, initialUpdateTimer, updateInterval;
 const entry = path.join(__dirname, 'ui', 'index.html');
-const entryURL = pathToFileURL(entry).href;
+const isEntryURL = createTrustedEntry(entry);
 
 function trustedSender(event) {
-  if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== entryURL) throw new Error('Untrusted request.');
+  if (!isTrustedSender(event, window?.webContents, isEntryURL)) throw new Error('Untrusted request.');
 }
 function handle(channel, operation) {
   ipcMain.handle(channel, async (event, ...args) => { trustedSender(event); return operation(...args); });
@@ -42,7 +42,7 @@ async function createWindow() {
   });
   window.setMenu(null);
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  window.webContents.on('will-navigate', (event, url) => { if (url !== entryURL) event.preventDefault(); });
+  window.webContents.on('will-navigate', (event, url) => { if (!isEntryURL(url)) event.preventDefault(); });
   window.webContents.on('will-redirect', event => event.preventDefault());
   window.webContents.on('will-attach-webview', event => event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));

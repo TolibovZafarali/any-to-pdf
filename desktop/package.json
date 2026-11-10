@@ -10,7 +10,7 @@
     "build:ui": "node scripts/prepare-pdf.mjs && vite build",
     "start": "npm run build:ui && electron .",
     "build": "npm run build:ui && electron-builder --win nsis --x64 --publish never",
-    "test": "node --test test/library.test.cjs test/updates.test.cjs test/release.test.cjs",
+    "test": "node --test test/library.test.cjs test/updates.test.cjs test/release.test.cjs test/trusted-entry.test.cjs",
     "test:app": "npm run build:ui && node --test test/electron.test.mjs",
     "test:installed": "node --test test/installed.test.mjs"
   },
@@ -26,7 +26,8 @@
       "library.cjs",
       "ui/**/*",
       "package.json",
-      "updates.cjs"
+      "updates.cjs",
+      "trusted-entry.cjs"
     ],
     "asar": true,
     "win": {
