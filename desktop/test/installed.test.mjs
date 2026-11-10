@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { load as loadYaml } from 'js-yaml';
 import { _electron as electron } from 'playwright';
@@ -147,7 +147,16 @@ test('the installed Windows app keeps an existing portable library and enables i
         }
         return state;
       }).catch(failure => ({ inspectionError: String(failure.message).slice(0, 1000) }));
-      throw new Error(`Installed renderer did not restore page 7: ${JSON.stringify({ ...diagnostics, startupErrors })}`, { cause: error });
+      const nativeDiagnostics = await application.evaluate(({ app, BrowserWindow }) => {
+        const window = BrowserWindow.getAllWindows()[0];
+        return {
+          appPath: app.getAppPath(),
+          mainFrameURL: window?.webContents.mainFrame.url,
+          webContentsURL: window?.webContents.getURL(),
+        };
+      }).catch(failure => ({ inspectionError: String(failure.message).slice(0, 1000) }));
+      const expectedEntryURL = pathToFileURL(path.join(runtime.appPath, 'ui', 'index.html')).href;
+      throw new Error(`Installed renderer did not restore page 7: ${JSON.stringify({ ...diagnostics, nativeDiagnostics, expectedEntryURL, pageURL: page.url(), startupErrors })}`, { cause: error });
     }
     assert.equal(await page.getByLabel('Page', { exact: true }).inputValue(), '7');
     assert.equal(await page.locator('#book-title').textContent(), 'Animal Farm');
