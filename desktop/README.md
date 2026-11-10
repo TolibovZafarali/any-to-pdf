@@ -6,7 +6,7 @@ Download the `Folio-Reader-Setup-<version>-x64.exe` installer from the repositor
 
 ## Updating
 
-Version 1.1.0 introduces the installed app and in-app updates. If you already use the portable 1.0.0 executable, close it and run the new installer once. Both versions use the same `%APPDATA%\Folio Reader\` directory, so your imported books, saved pages, and preferences carry over. After verifying the installed app opens your library, you can remove the old portable executable.
+Version 1.1.1 introduces the installed app and in-app updates. If you already use the portable 1.0.0 executable, close it and run the new installer once. Both versions use the same `%APPDATA%\Folio Reader\` directory, so your imported books, saved pages, and preferences carry over. After verifying the installed app opens your library, you can remove the old portable executable.
 
 For later releases, use the app's update controls to check for a new version, download it, and restart to install it. Update downloads connect to GitHub; your PDFs and reading history are not sent with them. The updater checks the installer's SHA-512 hash against the release metadata. A failed or interrupted update can be retried while the existing app and library remain available.
 

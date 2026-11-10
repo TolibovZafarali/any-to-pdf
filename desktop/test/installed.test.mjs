@@ -130,10 +130,13 @@ test('the installed Windows app keeps an existing portable library and enables i
     } finally {
       try {
         if (await exists(uninstaller)) {
-          // _?= prevents the NSIS self-copy/relaunch, so awaiting this process
-          // also waits for registry and shortcut cleanup. Do not pass a flag
-          // that forces keeping data: verify the real default uninstall policy.
-          await runFile(uninstaller, ['/S', `_?=${installation}`], processOptions);
+          // The NSIS process check matches every executable under $INSTDIR.
+          // Copy outside it before using _?=, as electron-builder's upgrade
+          // template does, so the uninstaller cannot detect/kill itself.
+          // _?= keeps this process waitable; no keep-data override is passed.
+          const cleanupExecutable = path.join(directory, 'uninstall.exe');
+          await copyFile(uninstaller, cleanupExecutable);
+          await runFile(cleanupExecutable, ['/S', `_?=${installation}`], processOptions);
           if (profileSeeded) await assertLibraryPreserved();
         }
       } finally {

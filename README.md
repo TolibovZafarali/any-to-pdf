@@ -4,7 +4,7 @@ Paperfold turns images into a single PDF in the browser. Choose files, drag them
 
 ## Download the Windows reader
 
-**[Download Folio Reader for Windows (.exe)](https://github.com/TolibovZafarali/any-to-pdf/releases/download/reader-v1.1.0/Folio-Reader-Setup-1.1.0-x64.exe)** · [Release notes and checksum](https://github.com/TolibovZafarali/any-to-pdf/releases/tag/reader-v1.1.0)
+**[Download Folio Reader for Windows (.exe)](https://github.com/TolibovZafarali/any-to-pdf/releases/download/reader-v1.1.1/Folio-Reader-Setup-1.1.1-x64.exe)** · [Release notes and checksum](https://github.com/TolibovZafarali/any-to-pdf/releases/tag/reader-v1.1.1)
 
 A standalone PDF reading app for **Windows 10/11, 64-bit**. Run the installer once, then open **Folio Reader** from the Start menu. Reading works offline; no account or server is needed.
 
