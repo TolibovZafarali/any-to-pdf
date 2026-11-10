@@ -1,6 +1,7 @@
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import worker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import './style.css';
+import { wireUpdates } from './updates.js';
 
 GlobalWorkerOptions.workerSrc = worker;
 const api = window.desktopReader;
@@ -244,6 +245,7 @@ $('page').addEventListener('blur', resize);
 window.addEventListener('resize', resize);
 async function init() {
   if (!api) { notify('Open Folio Reader from the desktop application.'); return; }
+  wireUpdates(api);
   try {
     library = await api.getLibrary(); updatePin(); drawShelf();
     const entry = library.books.find(item => item.id === library.activeBookId);

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing release tag, for example reader-v1.0.0'
+        description: 'Existing release tag, for example reader-v1.1.0'
         required: true
         type: string
 
@@ -64,7 +64,7 @@ jobs:
         working-directory: desktop
         run: npm ci
 
-      - name: Test local library storage
+      - name: Test library, updater, and release integrity
         working-directory: desktop
         run: npm test
 
@@ -72,28 +72,27 @@ jobs:
         working-directory: desktop
         run: npm run test:app
 
-      - name: Build portable Windows application
+      - name: Build Windows installer and update metadata
         working-directory: desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run build
 
-      - name: Check release artifact and calculate checksum
-        shell: pwsh
-        env:
-          APP_VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          $filename = "Folio-Reader-$env:APP_VERSION-x64.exe"
-          $file = Get-Item "desktop/release/$filename" -ErrorAction Stop
-          if ($file.Length -lt 1MB) { throw 'Portable executable is unexpectedly small.' }
-          $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $filename" | Set-Content desktop/release/SHA256SUMS.txt -Encoding utf8NoBOM
+      - name: Test installed Windows app and retained library
+        working-directory: desktop
+        run: npm run test:installed
+
+      - name: Verify installer, update manifest, and artifact checksums
+        working-directory: desktop
+        run: node scripts/verify-update.cjs
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-reader
           path: |
-            desktop/release/Folio-Reader-*-x64.exe
+            desktop/release/Folio-Reader-Setup-*-x64.exe
+            desktop/release/Folio-Reader-Setup-*-x64.exe.blockmap
+            desktop/release/latest.yml
             desktop/release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
@@ -110,7 +109,7 @@ jobs:
           name: windows-reader
           path: release
 
-      - name: Verify downloaded artifact
+      - name: Verify downloaded release artifacts
         working-directory: release
         run: sha256sum --check SHA256SUMS.txt
 
@@ -124,17 +123,36 @@ jobs:
         run: |
           set -euo pipefail
           cat > release-notes.md <<'NOTES'
-          A small, offline PDF reader for Windows 10/11 (64-bit).
+          A small PDF reader for Windows 10/11 (64-bit), with in-app updates.
 
-          Download the `.exe` asset and double-click it. No installation or account is required. Import your own PDFs, resize the window, and enable Always on top when needed. Imported files and reading positions are saved locally and restored when you reopen the app.
+          Download `Folio-Reader-Setup-<version>-x64.exe` and run it. The per-user installer requires no administrator access. Import your own PDFs, resize the window, and enable Always on top when needed. Imported books and reading positions are saved locally and restored when you reopen the app.
 
-          The application is unsigned. Windows may display a publisher or SmartScreen prompt; check that you downloaded it from this repository's release. `SHA256SUMS.txt` contains the download checksum.
+          If you used portable version 1.0.0, close it and install this version once. It opens the same local library from `%APPDATA%\Folio Reader\`; your books and saved pages are retained. Future versions can be downloaded and installed from the app's update controls. Installing updates or uninstalling the app retains this library data.
 
-          Your library stays on your computer; there is no backend or cloud sync. The portable executable stores library data in the normal Windows application-data folder, not beside the executable.
+          The application is unsigned. Windows may display a publisher or SmartScreen prompt; check that you downloaded it from this repository's release. `SHA256SUMS.txt` includes checksums for the installer, its blockmap, and `latest.yml`. The updater verifies the installer's SHA-512 against the release manifest before installation.
+
+          Books and reading history stay on your computer. Reading works offline; checking for and downloading updates connects to GitHub. The `.blockmap` and `latest.yml` assets are used by the updater and do not need to be opened manually.
           NOTES
-          gh release create "$RELEASE_TAG" \
-            "release/Folio-Reader-$APP_VERSION-x64.exe" \
+          if gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft > release-draft.txt 2>/dev/null; then
+            if [ "$(cat release-draft.txt)" != "true" ]; then
+              echo 'Refusing to replace an already published release.' >&2
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" \
+              --draft \
+              --verify-tag \
+              --title "Folio Reader $APP_VERSION for Windows" \
+              --notes-file release-notes.md
+          fi
+          gh release upload "$RELEASE_TAG" \
+            "release/Folio-Reader-Setup-$APP_VERSION-x64.exe" \
+            "release/Folio-Reader-Setup-$APP_VERSION-x64.exe.blockmap" \
+            release/latest.yml \
             release/SHA256SUMS.txt \
-            --verify-tag \
-            --title "Folio Reader $APP_VERSION for Windows" \
-            --notes-file release-notes.md
+            --clobber
+          # A draft keeps the updater feed unchanged until every artifact is uploaded.
+          gh release edit "$RELEASE_TAG" \
+            --notes-file release-notes.md \
+            --draft=false \
+            --latest

@@ -2,9 +2,11 @@ const { app, BrowserWindow, dialog, ipcMain, screen, Menu } = require('electron'
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { LibraryStore } = require('./library.cjs');
+const { createUpdater } = require('./updates.cjs');
 
 app.setName('Folio Reader');
 let window, store, boundsTimer, closing = false;
+let updates, initialUpdateTimer, updateInterval;
 const entry = path.join(__dirname, 'ui', 'index.html');
 const entryURL = pathToFileURL(entry).href;
 
@@ -80,7 +82,37 @@ else {
       return result.response === 1 ? store.removeBook(id) : store.snapshot();
     });
     handle('reader:set-always-on-top', async value => { await store.setAlwaysOnTop(value); window.setAlwaysOnTop(value); return value; });
+    const updatesEnabled = app.isPackaged && process.platform === 'win32';
+    updates = createUpdater({
+      autoUpdater: updatesEnabled ? require('electron-updater').autoUpdater : null,
+      enabled: updatesEnabled,
+      currentVersion: app.getVersion(),
+      beforeInstall: async () => {
+        // Let the updater's quit path proceed only after local progress and
+        // window settings have reached disk.
+        clearTimeout(boundsTimer);
+        if (window && !window.isDestroyed()) await store.setWindowBounds(window.getNormalBounds());
+        await store.flush();
+        closing = true;
+      },
+      onState: state => {
+        if (state.status === 'error') closing = false;
+        if (window && !window.isDestroyed()) window.webContents.send('reader:update-state', state);
+      },
+    });
+    handle('reader:get-update-state', () => updates.snapshot());
+    handle('reader:check-updates', () => updates.check());
+    handle('reader:install-update', () => updates.install());
     await createWindow();
+    if (updatesEnabled) {
+      initialUpdateTimer = setTimeout(() => updates.check(), 10_000);
+      updateInterval = setInterval(() => updates.check(), 6 * 60 * 60 * 1000);
+      initialUpdateTimer.unref(); updateInterval.unref();
+    }
   }).catch(error => { dialog.showErrorBox('Folio Reader could not start', error.message); app.quit(); });
+  app.once('before-quit', () => {
+    clearTimeout(initialUpdateTimer); clearInterval(updateInterval);
+    updates?.dispose();
+  });
   app.on('window-all-closed', () => app.quit());
 }

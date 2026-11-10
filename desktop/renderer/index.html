@@ -10,11 +10,12 @@
   <header class="app-header">
     <button id="shelf-toggle" class="icon-button" title="Show bookshelf" aria-label="Show bookshelf" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM9 4v16"/></svg></button>
     <div class="app-brand"><strong>folio<span>.</span></strong><small>READER</small></div>
-    <div class="header-actions"><button id="pin" class="icon-button" title="Keep on top" aria-label="Keep on top" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="m8 3 8 0-1 7 3 3v2H6v-2l3-3-1-7ZM12 15v6"/></svg></button><button id="import" class="import-button"><span aria-hidden="true">+</span> Open PDF</button></div>
+    <div class="header-actions"><button id="check-updates" class="icon-button" aria-label="Check for updates" title="Check for updates"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg><span class="update-dot" hidden></span></button><button id="pin" class="icon-button" title="Keep on top" aria-label="Keep on top" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="m8 3 8 0-1 7 3 3v2H6v-2l3-3-1-7ZM12 15v6"/></svg></button><button id="import" class="import-button"><span aria-hidden="true">+</span> Open PDF</button></div>
   </header>
   <div id="notice" class="notice" role="status" hidden><span id="notice-text"></span><button id="dismiss-notice" aria-label="Dismiss notification">×</button></div>
+  <div id="update-banner" class="update-banner" hidden><p id="update-message" role="status" aria-live="polite"></p><button id="update-action" class="update-action" hidden>Update and restart</button><button id="dismiss-update" class="icon-button" aria-label="Dismiss update message">×</button></div>
   <div class="app-body">
-    <aside id="shelf" class="shelf" aria-label="Bookshelf" hidden><div class="shelf-header"><h2>Your bookshelf</h2><button id="close-shelf" class="icon-button" aria-label="Close bookshelf">×</button></div><p class="shelf-hint">Saved on this computer</p><div id="books"></div><p id="empty-shelf">Your PDFs will appear here.</p></aside>
+    <aside id="shelf" class="shelf" aria-label="Bookshelf" hidden><div class="shelf-header"><h2>Your bookshelf</h2><button id="close-shelf" class="icon-button" aria-label="Close bookshelf">×</button></div><p class="shelf-hint">Saved on this computer</p><div id="books"></div><p id="empty-shelf">Your PDFs will appear here.</p><p class="app-version">Folio Reader <span id="app-version"></span></p></aside>
     <main id="main">
       <section id="welcome" class="welcome">
         <div class="empty-book" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M10 8h22a5 5 0 0 1 5 5v27H14a4 4 0 0 1-4-4V8Zm0 27a4 4 0 0 1 4-4h23M17 15h12M17 21h9"/></svg></div>

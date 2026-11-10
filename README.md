@@ -4,16 +4,19 @@ Paperfold turns images into a single PDF in the browser. Choose files, drag them
 
 ## Download the Windows reader
 
-**[Download Folio Reader for Windows (.exe)](https://github.com/TolibovZafarali/any-to-pdf/releases/download/reader-v1.0.0/Folio-Reader-1.0.0-x64.exe)** · [Release notes and checksum](https://github.com/TolibovZafarali/any-to-pdf/releases/tag/reader-v1.0.0)
+**[Download Folio Reader for Windows (.exe)](https://github.com/TolibovZafarali/any-to-pdf/releases/download/reader-v1.1.0/Folio-Reader-Setup-1.1.0-x64.exe)** · [Release notes and checksum](https://github.com/TolibovZafarali/any-to-pdf/releases/tag/reader-v1.1.0)
 
-A standalone, offline PDF reading app for **Windows 10/11, 64-bit**. Download the portable executable and double-click it—no installation, account, or server required.
+A standalone PDF reading app for **Windows 10/11, 64-bit**. Run the installer once, then open **Folio Reader** from the Start menu. Reading works offline; no account or server is needed.
 
 - Click **Open PDF** to import your books. The app keeps its own local copies.
 - Resize the window to fit alongside your work, or use the **pin button** to keep it above other windows.
 - Switch between readable **Text** and original **PDF** views, adjust zoom, and jump to a page.
 - Reopen the app to return to your last book and page. The bookshelf, window size, and pin preference are remembered.
+- When a newer release is available, click **Update and restart** once. The app downloads the update, saves your place, installs it, and reopens. The circular-arrow button checks for updates manually.
 
-Your PDFs and progress stay in `%APPDATA%\Folio Reader`. They are not uploaded. Moving the executable or original PDFs does not delete the library. This build is unsigned, so Windows may display an unknown-publisher or SmartScreen warning.
+**Already using portable version 1.0.0?** Close it and run the new installer once. The installed app uses the same `%APPDATA%\Folio Reader` folder, preserving your books, page positions, window size, and pin setting. Use the installed Start menu app from then on; the old portable executable cannot update itself.
+
+Your PDFs and progress stay on your computer and are never uploaded. Update checks connect to this repository’s GitHub Releases on startup and periodically; downloads happen only when you choose to update. Uninstalling the app leaves your library in place. This build is unsigned, so Windows may display an unknown-publisher or SmartScreen warning.
 
 [Desktop development and release instructions](desktop/README.md)
 

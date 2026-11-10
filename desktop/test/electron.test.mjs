@@ -18,7 +18,7 @@ async function waitForPage(page, number) {
   }, number);
 }
 
-test('the native app imports, pins, resizes and restores its copied PDF and saved page after restart', { timeout: 120_000 }, async () => {
+test('the native app imports, shows update states, pins, resizes and restores its copied PDF after restart', { timeout: 120_000 }, async () => {
   await access(path.join(desktop, 'ui', 'index.html'));
   const directory = await mkdtemp(path.join(tmpdir(), 'folio-electron-test-'));
   const profile = path.join(directory, 'profile');
@@ -45,6 +45,13 @@ test('the native app imports, pins, resizes and restores its copied PDF and save
   try {
     let page = await launch();
     await page.locator('#welcome').waitFor();
+    // An unpackaged app must report that updates are unavailable, through the
+    // actual renderer -> preload -> main command bridge, without doing network I/O.
+    await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#update-message')?.textContent.includes('installed Windows app'));
+    assert(await page.locator('#update-banner').isVisible());
+    assert(await page.locator('#update-action').isHidden());
+    await page.getByRole('button', { name: 'Dismiss update message' }).click();
     await application.evaluate(({ dialog }, filename) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] });
     }, original);
@@ -74,6 +81,50 @@ test('the native app imports, pins, resizes and restores its copied PDF and save
     await page.waitForTimeout(300);
     await waitForPage(page, 7);
     await page.getByRole('button', { name: 'Text', exact: true }).click();
+    // Exercise the real main-to-preload notification path without downloading
+    // or installing an invented release. Controller tests cover installation.
+    const currentUpdateState = await page.evaluate(() => window.desktopReader.getUpdateState());
+    const announceUpdate = state => application.evaluate(({ BrowserWindow }, update) => {
+      BrowserWindow.getAllWindows()[0].webContents.send('reader:update-state', update);
+    }, { ...currentUpdateState, availableVersion: '9.9.9', ...state });
+    await announceUpdate({ status: 'available' });
+    await page.locator('#update-banner').waitFor();
+    assert.match(await page.locator('#update-message').textContent(), /9\.9\.9/);
+    assert(await page.getByRole('button', { name: 'Update and restart', exact: true }).isEnabled());
+    await page.getByRole('button', { name: 'Dismiss update message' }).click();
+    await announceUpdate({ status: 'available' });
+    assert(await page.locator('#update-banner').isHidden(), 'a repeated notification should respect dismissal');
+    await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#update-message')?.textContent.includes('installed Windows app'));
+    assert(await page.locator('#update-banner').isVisible(), 'manual checking should reveal the result again');
+    await announceUpdate({ status: 'downloading', percent: 42.4 });
+    await page.waitForFunction(() => document.querySelector('#update-message')?.textContent.includes('42%'));
+    assert(await page.getByRole('button', { name: 'Check for updates', exact: true }).isDisabled());
+    assert(await page.locator('#update-action').isDisabled());
+    assert(await page.getByRole('button', { name: 'Dismiss update message' }).isHidden());
+    await page.getByRole('button', { name: 'Previous page', exact: true }).click();
+    await waitForPage(page, 6);
+    await page.getByRole('button', { name: 'Next page', exact: true }).click();
+    await waitForPage(page, 7);
+    const updateError = 'The update could not be verified. Check for updates and try again.';
+    await announceUpdate({ status: 'error', message: updateError });
+    await page.getByRole('button', { name: 'Try again', exact: true }).waitFor();
+    assert.equal(await page.locator('#update-message').textContent(), updateError);
+    assert(await page.getByRole('button', { name: 'Try again', exact: true }).isEnabled());
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ width: 360, height: 580 }));
+    await page.waitForFunction(() => innerWidth <= 360);
+    await page.waitForTimeout(300);
+    await waitForPage(page, 7);
+    assert(await page.locator('#update-banner').evaluate(element => element.scrollWidth <= element.clientWidth), 'update banner should fit the minimum window width');
+    assert(await page.locator('.app-header').evaluate(element => element.scrollWidth <= element.clientWidth), 'update control should fit the minimum window width');
+    if (process.env.FOLIO_TEST_SCREENSHOTS) await page.screenshot({ path: path.join(process.env.FOLIO_TEST_SCREENSHOTS, 'folio-desktop-update-error.png') });
+    await page.getByRole('button', { name: 'Try again', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#update-message')?.textContent.includes('installed Windows app'));
+    await page.getByRole('button', { name: 'Dismiss update message' }).click();
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ x: 25, y: 30, width: 420, height: 580 }));
+    await page.waitForFunction(() => innerWidth <= 420 && innerWidth > 360);
+    await page.waitForTimeout(300);
+    await waitForPage(page, 7);
     if (process.env.FOLIO_TEST_SCREENSHOTS) await page.screenshot({ path: path.join(process.env.FOLIO_TEST_SCREENSHOTS, 'folio-desktop-small.png') });
     const nativeBounds = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getNormalBounds());
     assert.equal(nativeBounds.width, 420);
