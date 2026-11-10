@@ -132,7 +132,7 @@ export function wireIntake({ dropZone, input, pasteButton, onFiles, onMessage, o
   dropZone.addEventListener('drop', event => {
     event.preventDefault()
     resetDrag()
-    receive(transferFiles(event.dataTransfer))
+    if (isFileDrag(event)) receive(transferFiles(event.dataTransfer))
   }, options)
 
   // Keep a misplaced file drop from navigating away from the current document.

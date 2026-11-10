@@ -15,6 +15,7 @@
     "heic-to": "^1.6.7",
     "lucide": "^1.70.0",
     "pdf-lib": "^1.17.1",
+    "sortablejs": "^1.15.7",
     "utif2": "^4.1.0"
   },
   "devDependencies": {

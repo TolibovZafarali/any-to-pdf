@@ -1,6 +1,6 @@
 # Paperfold
 
-Paperfold turns images into a single PDF in the browser. Choose files, drag them in, or paste a copied image or screenshot. Reorder the previews to set the page order and choose between image-sized, A4, and US Letter pages. Enter a name under **Save PDF as**, or use the first image’s name. Paperfold adds the `.pdf` extension when you download. All processing takes place on the device. Reloading the page clears the queue.
+Paperfold turns images into a single PDF in the browser. Choose files, drag them in, or paste a copied image or screenshot. Drag a photo preview or its grip to change the PDF page order; on touchscreens, hold briefly before dragging. For keyboard control, focus a grip and use the arrow keys, Home, or End. Choose between image-sized, A4, and US Letter pages. Enter a name under **Save PDF as**, or use the first image’s name. Paperfold adds the `.pdf` extension when you download. All processing takes place on the device. Reloading the page clears the queue.
 
 ## Run locally
 

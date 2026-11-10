@@ -97,6 +97,7 @@ test('clearing all images starts a fresh batch with the chosen export settings',
   assert(await clear.isHidden());
 
   await input.setInputFiles([{ ...svg, name: 'First.svg' }, svg]);
+  await page.waitForFunction(() => document.querySelectorAll('.image-row').length === 2 && !document.querySelector('#convert').disabled);
   await filename.fill('Old batch');
   await size.selectOption('letter');
   await compression.selectOption('small');
@@ -235,4 +236,127 @@ test('a subsampled TIFF preserves red in its preview and exports a page', async 
   assert(r > 180 && g < 60 && b < 60, 'the red sample should remain red');
   const pdf = await PDFDocument.load(await downloadFrom(page.locator('#convert'), 'Red.pdf'));
   assert.deepEqual(pdf.getPage(0).getSize(), { width: 3, height: 3 });
+});
+
+const reorderImages = Array.from({ length: 5 }, (_, index) => ({
+  name: `Page ${index + 1}.svg`,
+  mimeType: 'image/svg+xml',
+  buffer: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${40 * (index + 1)}" height="40"><rect width="100%" height="100%" fill="red"/></svg>`),
+}));
+
+async function prepareReorderImages(count = 5) {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.locator('#image-input').setInputFiles(reorderImages.slice(0, count));
+  await page.waitForFunction(total => document.querySelectorAll('.image-row').length === total && !document.querySelector('#convert').disabled, count);
+  await page.getByLabel('Save PDF as').fill('Ordered pages');
+}
+
+function imageCard(name) {
+  return page.locator('.image-row').filter({ has: page.locator('.image-detail strong', { hasText: name }) });
+}
+
+async function dragCard(name, destination, after, target = '.reorder-handle') {
+  const handle = imageCard(name).locator(target);
+  await handle.scrollIntoViewIfNeeded();
+  const start = await handle.boundingBox();
+  const end = await imageCard(destination).boundingBox();
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(start.x + start.width / 2 + 12, start.y + start.height / 2, { steps: 4 });
+  const destinationX = end.x + end.width * (after ? 0.8 : 0.2);
+  const destinationY = end.y + end.height / 2;
+  await page.mouse.move(destinationX, destinationY, { steps: 20 });
+  // Let the cards settle before the final dragover and release at this position.
+  await page.waitForTimeout(200);
+  await page.mouse.move(destinationX + 1, destinationY);
+  await page.mouse.up();
+}
+
+async function assertPdfOrder(order) {
+  const pdf = await PDFDocument.load(await downloadFrom(page.locator('#convert'), 'Ordered pages.pdf'));
+  assert.deepEqual(pdf.getPages().map(pdfPage => pdfPage.getSize()), order.map(number => ({ width: 30 * number, height: 30 })));
+}
+
+test('dragging cards between grid rows changes the PDF page order and invalidates an earlier download', async () => {
+  await prepareReorderImages();
+  const firstRow = await imageCard('Page 1.svg').boundingBox();
+  const lastRow = await imageCard('Page 5.svg').boundingBox();
+  assert(lastRow.y > firstRow.y, 'exercise a drag across rows rather than only adjacent cards');
+  await assertPdfOrder([1, 2, 3, 4, 5]);
+
+  await dragCard('Page 1.svg', 'Page 5.svg', true);
+  await page.waitForFunction(() => document.querySelector('#queue > :last-child .image-detail strong')?.textContent === 'Page 1.svg');
+  assert.deepEqual(await page.locator('.image-detail strong').allTextContents(), ['Page 2.svg', 'Page 3.svg', 'Page 4.svg', 'Page 5.svg', 'Page 1.svg']);
+  assert(await page.locator('#download').isHidden());
+  assert.equal(await page.locator('#image-count').textContent(), '5 images');
+  await assertPdfOrder([2, 3, 4, 5, 1]);
+
+  await dragCard('Page 1.svg', 'Page 2.svg', false, 'img');
+  await page.waitForFunction(() => document.querySelector('#queue > :first-child .image-detail strong')?.textContent === 'Page 1.svg');
+  assert(await page.locator('#download').isHidden());
+  await assertPdfOrder([1, 2, 3, 4, 5]);
+  assert.deepEqual(await page.locator('.page-number').allTextContents(), ['1', '2', '3', '4', '5']);
+});
+
+test('keyboard reordering and removal set the export order and controls lock during export', async () => {
+  await prepareReorderImages(3);
+  const handle = imageCard('Page 1.svg').locator('.reorder-handle');
+  await handle.focus();
+  await handle.press('End');
+  assert.deepEqual(await page.locator('.image-detail strong').allTextContents(), ['Page 2.svg', 'Page 3.svg', 'Page 1.svg']);
+  await handle.press('Home');
+  await handle.press('ArrowRight');
+  assert.deepEqual(await page.locator('.image-detail strong').allTextContents(), ['Page 2.svg', 'Page 1.svg', 'Page 3.svg']);
+  await page.getByRole('button', { name: 'Remove Page 3.svg', exact: true }).click();
+
+  // Keep the actual JPEG encoder pending long enough to exercise the export lock.
+  await page.evaluate(() => {
+    const encode = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+      HTMLCanvasElement.prototype.toBlob = encode;
+      window.finishEncoding = () => encode.call(this, callback, type, quality);
+    };
+  });
+  const pendingDownload = page.waitForEvent('download');
+  await page.locator('#convert').click();
+  await page.waitForFunction(() => typeof window.finishEncoding === 'function');
+  for (const control of await page.locator('.reorder-handle, [data-action="remove"]').all()) assert(await control.isDisabled());
+  await page.evaluate(() => window.finishEncoding());
+  const download = await pendingDownload;
+  assert.equal(download.suggestedFilename(), 'Ordered pages.pdf');
+  const pdf = await PDFDocument.load(await readFile(await download.path()));
+  assert.deepEqual(pdf.getPages().map(pdfPage => pdfPage.getSize()), [{ width: 60, height: 30 }, { width: 30, height: 30 }]);
+  assert.deepEqual(await page.locator('.image-detail strong').allTextContents(), ['Page 2.svg', 'Page 1.svg']);
+  assert(await handle.isEnabled());
+});
+
+test('dropping a card outside the queue cancels without importing it and real file drops still work', async () => {
+  await prepareReorderImages(2);
+  await assertPdfOrder([1, 2]);
+  const savedDownload = await page.locator('#download').getAttribute('href');
+  const handle = imageCard('Page 1.svg').locator('.reorder-handle');
+  const start = await handle.boundingBox();
+  const outside = await page.locator('#drop-zone').boundingBox();
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(start.x + start.width / 2 + 12, start.y + start.height / 2, { steps: 4 });
+  await page.mouse.move(outside.x + outside.width / 2, outside.y + outside.height / 2, { steps: 20 });
+  await page.mouse.up();
+  await page.waitForFunction(() => !document.querySelector('#convert').disabled);
+  assert.deepEqual(await page.locator('.image-detail strong').allTextContents(), ['Page 1.svg', 'Page 2.svg']);
+  assert.equal(await page.locator('#download').getAttribute('href'), savedDownload);
+  assert(await page.locator('#download').isVisible());
+  assert(await page.locator('#message').isHidden());
+
+  await page.locator('#drop-zone').evaluate(target => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['<svg xmlns="http://www.w3.org/2000/svg" width="40" height="80"><rect width="40" height="80" fill="blue"/></svg>'], 'Dropped.svg', { type: 'image/svg+xml' }));
+    for (const type of ['dragenter', 'dragover', 'drop']) target.dispatchEvent(new DragEvent(type, { dataTransfer: transfer, bubbles: true, cancelable: true }));
+  });
+  await page.waitForFunction(() => document.querySelectorAll('.image-row').length === 3 && !document.querySelector('#convert').disabled);
+  assert.deepEqual(await page.locator('.image-detail strong').allTextContents(), ['Page 1.svg', 'Page 2.svg', 'Dropped.svg']);
+  assert.equal(await page.locator('#image-count').textContent(), '3 images');
+  assert(await page.locator('#download').isHidden());
+  const pdf = await PDFDocument.load(await downloadFrom(page.locator('#convert'), 'Ordered pages.pdf'));
+  assert.deepEqual(pdf.getPages().map(pdfPage => pdfPage.getSize()), [{ width: 30, height: 30 }, { width: 60, height: 30 }, { width: 30, height: 60 }]);
 });

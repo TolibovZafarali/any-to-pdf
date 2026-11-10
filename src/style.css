@@ -177,6 +177,8 @@ kbd { font: 10px/1.5 var(--mono); color: #636358; white-space: nowrap; }
 .compact h3 { font: 580 16px/1.2 'DM Sans', sans-serif; letter-spacing: -.03em; }
 .compact .intake-buttons { margin: 0; }
 .compact .button { min-height: 36px; }
+.reorder-hint { margin-top: 16px; color: var(--subtle); font-size: 12px; }
+.reorder-hint:not([hidden]) ~ .queue { margin-top: 10px; }
 .queue {
   list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 175px), 1fr));
   gap: 20px 15px; padding: 0 0 18px; margin: 20px 0 0; border-bottom: 1px solid var(--rule);
@@ -191,7 +193,14 @@ kbd { font: 10px/1.5 var(--mono); color: #636358; white-space: nowrap; }
 .image-row img {
   grid-area: photo; width: 100%; height: 134px; padding: 7px; background: #fffefa;
   border: 1px solid var(--rule); object-fit: contain; box-shadow: 0 1px 2px #211a1010;
+  user-select: none; -webkit-user-drag: none; touch-action: pan-y;
 }
+.queue:not([data-reorder-disabled='true']) .image-row img { cursor: grab; }
+.image-row.sortable-chosen img { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.image-row.sortable-ghost { opacity: .3; }
+.image-row.sortable-drag { background: var(--body); border-radius: 4px; }
+.image-row.sortable-drag img { box-shadow: 0 7px 18px #211a1024; }
+.image-row.sortable-chosen img, .image-row.sortable-drag img { cursor: grabbing !important; }
 .image-detail { grid-area: detail; min-width: 0; }
 .image-detail strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 580; }
 .image-detail small { display: block; margin-top: 1px; color: var(--subtle); font-size: 11px; }
@@ -202,6 +211,10 @@ kbd { font: 10px/1.5 var(--mono); color: #636358; white-space: nowrap; }
 .row-actions button svg { width: 15px; height: 15px; }
 .row-actions button:hover:not(:disabled), .dialog-heading button:hover, .message button:hover { background: #e6e4db; }
 .row-actions button:disabled { opacity: .25; }
+.row-actions .reorder-handle { cursor: grab; touch-action: none; color: var(--subtle); }
+.row-actions .reorder-handle:active, .sortable-chosen .reorder-handle { cursor: grabbing; }
+.row-actions .reorder-handle:focus-visible { color: var(--accent); background: #f3e7de; outline-offset: 2px; }
+.row-actions .reorder-handle:disabled { cursor: default; }
 .message { display: flex; align-items: center; gap: 9px; margin-top: 12px; padding: 8px 10px; background: #f1e7d9; color: #6a4831; font-size: 13px; }
 .message span { overflow-wrap: anywhere; white-space: pre-line; }
 .message button { margin-left: auto; flex-shrink: 0; }
@@ -268,4 +281,5 @@ dialog::backdrop { background: #27251c55; }
 @media (pointer: coarse) {
   .paste kbd { display: none; }
   .select-wrap select { height: 44px; font-size: 16px; }
+  .row-actions button { width: 44px; height: 44px; }
 }

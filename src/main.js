@@ -1,7 +1,8 @@
 import {
   createElement, Plus, ChevronDown, ShieldCheck, CircleHelp,
-  X, CircleCheck, Download, Info, ArrowLeft, ArrowRight,
+  X, CircleCheck, Download, Info, GripVertical,
 } from 'lucide';
+import Sortable from 'sortablejs';
 import { artwork } from './art.js';
 import { wireIntake } from './intake.js';
 import { prepareImage, exportPdf } from './conversion.js';
@@ -43,6 +44,7 @@ const waiting = [];
 let preparing = false;
 let clipboardPending = false;
 let exporting = false;
+let reordering = false;
 let filenameEdited = false;
 let resultUrl;
 
@@ -90,11 +92,15 @@ function showMessage(message) {
 function updateControls() {
   const importing = clipboardPending || preparing;
   clearAll.hidden = !items.length;
-  clearAll.disabled = importing || exporting;
-  convert.disabled = !items.length || importing || exporting;
-  byId('result').hidden = !resultUrl || importing;
-  pageSize.disabled = compression.disabled = filename.disabled = exporting;
-  chooseButton.disabled = pasteButton.disabled = exporting;
+  clearAll.disabled = importing || exporting || reordering;
+  convert.disabled = !items.length || importing || exporting || reordering;
+  byId('result').hidden = !resultUrl || importing || reordering;
+  pageSize.disabled = compression.disabled = filename.disabled = exporting || reordering;
+  chooseButton.disabled = pasteButton.disabled = exporting || reordering;
+  const reorderDisabled = importing || exporting || items.length < 2;
+  sorter.option('disabled', reorderDisabled);
+  queue.dataset.reorderDisabled = String(reorderDisabled);
+  byId('reorder-hint').hidden = items.length < 2;
   chooseButton.querySelector('span').textContent = preparing ? 'Preparing images…' : 'Choose images';
   dropZone.classList.toggle('compact', items.length > 0);
   byId('drop-title').textContent = items.length ? 'Add more images' : 'Drop images here';
@@ -103,11 +109,12 @@ function updateControls() {
   const inputSize = items.reduce((total, item) => total + item.size, 0);
   const summary = items.length ? pageCount(items.length) + ' · ' + formatSize(inputSize) : '0 pages';
   byId('convert-hint').textContent = clipboardPending ? 'Reading clipboard…' : summary;
+  refreshRows();
 }
 
 async function addFiles(files) {
-  if (exporting) {
-    showMessage('Your PDF is being created. Add more images when it is ready.');
+  if (exporting || reordering) {
+    showMessage(exporting ? 'Your PDF is being created. Add more images when it is ready.' : 'Finish arranging your photos, then add more images.');
     return;
   }
   waiting.push(...files);
@@ -128,7 +135,6 @@ async function addFiles(files) {
         }
         items.push(item);
         queue.append(imageRow(item));
-        refreshRows();
         updateControls();
       } catch (error) {
         errors.push(file.name + ' — ' + error.message);
@@ -136,7 +142,6 @@ async function addFiles(files) {
     }
   } finally {
     preparing = false;
-    refreshRows();
     updateControls();
     if (errors.length) showMessage(errors.join('\n'));
     announce(pageCount(items.length) + ' ready.');
@@ -153,6 +158,7 @@ function imageRow(item) {
   const thumb = document.createElement('img');
   thumb.src = item.thumbnail;
   thumb.alt = '';
+  thumb.draggable = false;
   const detail = document.createElement('div');
   detail.className = 'image-detail';
   const name = document.createElement('strong');
@@ -164,8 +170,7 @@ function imageRow(item) {
   const actions = document.createElement('div');
   actions.className = 'row-actions';
   const controls = [
-    ['earlier', 'Move ' + item.name + ' earlier', ArrowLeft],
-    ['later', 'Move ' + item.name + ' later', ArrowRight],
+    ['reorder', 'Reorder ' + item.name, GripVertical],
     ['remove', 'Remove ' + item.name, X],
   ];
   for (const [action, label, shape] of controls) {
@@ -174,6 +179,12 @@ function imageRow(item) {
     button.dataset.action = action;
     button.setAttribute('aria-label', label);
     button.title = label;
+    if (action === 'reorder') {
+      button.className = 'reorder-handle';
+      button.setAttribute('aria-describedby', 'reorder-instructions');
+      button.setAttribute('aria-keyshortcuts', 'ArrowLeft ArrowRight ArrowUp ArrowDown Home End');
+      button.title = 'Drag to reorder, or focus and use the arrow keys';
+    }
     button.append(icon(shape));
     actions.append(button);
   }
@@ -183,39 +194,85 @@ function imageRow(item) {
 function refreshRows() {
   Array.from(queue.children).forEach((row, index) => {
     row.querySelector('.page-number').textContent = index + 1;
-    row.querySelector('[data-action="earlier"]').disabled = exporting || index === 0;
-    row.querySelector('[data-action="later"]').disabled = exporting || index === items.length - 1;
-    row.querySelector('[data-action="remove"]').disabled = exporting;
+    const handle = row.querySelector('.reorder-handle');
+    handle.disabled = exporting || preparing || clipboardPending || items.length < 2;
+    const name = row.querySelector('.image-detail strong').textContent;
+    handle.setAttribute('aria-label', 'Reorder ' + name + ', page ' + (index + 1) + ' of ' + items.length);
+    row.querySelector('[data-action="remove"]').disabled = exporting || reordering;
   });
 }
+
+// Sort the existing cards, then commit their order to the PDF's source array
+// once the gesture ends. Releasing outside the queue restores the old order.
+const sorter = new Sortable(queue, {
+  draggable: '.image-row',
+  handle: '.image-row img, .reorder-handle',
+  animation: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 150,
+  fallbackOnBody: true,
+  fallbackTolerance: 5,
+  delay: 180,
+  delayOnTouchOnly: true,
+  touchStartThreshold: 5,
+  revertOnSpill: true,
+  onStart() {
+    reordering = true;
+    updateControls();
+  },
+  onChange: refreshRows,
+  onEnd({ item: row, originalEvent }) {
+    if (['pointercancel', 'touchcancel', 'dragend'].includes(originalEvent?.type)) {
+      sorter.sort(items.map(item => item.id));
+    }
+    const imagesById = new Map(items.map(item => [item.id, item]));
+    const reordered = sorter.toArray().map(id => imagesById.get(id));
+    const changed = reordered.some((item, index) => item !== items[index]);
+    if (changed) {
+      items.splice(0, items.length, ...reordered);
+      clearResult();
+      const index = items.findIndex(item => item.id === row.dataset.id);
+      announce(items[index].name + ' moved to page ' + (index + 1) + '.');
+    }
+    reordering = false;
+    updateControls();
+  },
+});
+
+queue.addEventListener('keydown', event => {
+  const handle = event.target.closest('.reorder-handle');
+  if (!handle || handle.disabled || reordering || event.altKey || event.ctrlKey || event.metaKey) return;
+  const row = handle.closest('.image-row');
+  const index = items.findIndex(item => item.id === row.dataset.id);
+  const targets = { ArrowLeft: index - 1, ArrowUp: index - 1, ArrowRight: index + 1, ArrowDown: index + 1, Home: 0, End: items.length - 1 };
+  if (!(event.key in targets)) return;
+  event.preventDefault();
+  const target = Math.max(0, Math.min(items.length - 1, targets[event.key]));
+  if (target === index) return;
+  if (target < index) queue.children[target].before(row);
+  else queue.children[target].after(row);
+  const item = items.splice(index, 1)[0];
+  items.splice(target, 0, item);
+  clearResult();
+  updateControls();
+  handle.focus({ preventScroll: true });
+  row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  announce(item.name + ' moved to page ' + (target + 1) + '.');
+});
+
 queue.addEventListener('click', event => {
-  const button = event.target.closest('button[data-action]');
-  if (!button || button.disabled || exporting) return;
+  const button = event.target.closest('button[data-action="remove"]');
+  if (!button || button.disabled || exporting || reordering) return;
   const row = button.closest('li');
   const index = items.findIndex(item => item.id === row.dataset.id);
-  const action = button.dataset.action;
   const item = items[index];
   clearResult();
-  if (action === 'remove') {
-    items.splice(index, 1);
-    if (!items.length && !filenameEdited) filename.value = '';
-    URL.revokeObjectURL(item.thumbnail);
-    row.remove();
-    (queue.children[index]?.querySelector('[data-action="remove"]') ||
-      queue.lastElementChild?.querySelector('[data-action="remove"]') || chooseButton).focus();
-    announce(item.name + ' removed.');
-  } else {
-    const target = index + (action === 'earlier' ? -1 : 1);
-    items.splice(target, 0, items.splice(index, 1)[0]);
-    if (target < index) row.previousElementSibling.before(row);
-    else row.nextElementSibling.after(row);
-    announce(item.name + ' moved to page ' + (target + 1) + '.');
-  }
-  refreshRows();
+  items.splice(index, 1);
+  if (!items.length && !filenameEdited) filename.value = '';
+  URL.revokeObjectURL(item.thumbnail);
+  row.remove();
+  (queue.children[index]?.querySelector('[data-action="remove"]') ||
+    queue.lastElementChild?.querySelector('[data-action="remove"]') || chooseButton).focus();
+  announce(item.name + ' removed.');
   updateControls();
-  if (action !== 'remove') {
-    (button.disabled ? row.querySelector('button:not(:disabled)') : button)?.focus();
-  }
 });
 
 clearAll.addEventListener('click', () => {
@@ -270,7 +327,6 @@ convert.addEventListener('click', async () => {
   exportError.hidden = true;
   exporting = true;
   updateControls();
-  refreshRows();
   byId('message').hidden = true;
   convertText.textContent = 'Creating PDF…';
   try {
@@ -294,7 +350,6 @@ convert.addEventListener('click', async () => {
     exporting = false;
     convertText.textContent = 'Download PDF';
     updateControls();
-    refreshRows();
   }
 });
 
@@ -307,7 +362,7 @@ function openDialog(title, content) {
 byId('formats-button').addEventListener('click', () => openDialog('Supported formats',
   '<p>Paperfold accepts JPG, JPEG, PNG, WebP, GIF, BMP, SVG, HEIC, HEIF, TIFF, and other images your browser can open.</p><p>Animated images and multi-image files contribute one still image per file. Transparent areas appear white in the PDF.</p>'));
 byId('help').addEventListener('click', () => openDialog('How it works',
-  '<ol class="help-steps"><li><strong>Add your images</strong>Choose files, drop them in the image area, or paste a copied image or screenshot.</li><li><strong>Arrange your pages</strong>Each image becomes one page. Use the arrows to change their order.</li><li><strong>Name and download</strong>Enter a file name, choose your page size and compression, then select Download PDF.</li></ol>'));
+  '<ol class="help-steps"><li><strong>Add your images</strong>Choose files, drop them in the image area, or paste a copied image or screenshot.</li><li><strong>Arrange your pages</strong>Drag a photo or its grip to change the page order. On a touchscreen, hold briefly before dragging. You can also focus a grip and use the arrow keys, Home, or End.</li><li><strong>Name and download</strong>Enter a file name, choose your page size and compression, then select Download PDF.</li></ol>'));
 byId('close-dialog').addEventListener('click', () => dialog.close());
 dialog.addEventListener('click', event => {
   const rect = dialog.getBoundingClientRect();
