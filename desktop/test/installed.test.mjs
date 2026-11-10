@@ -112,12 +112,9 @@ test('the installed Windows app keeps an existing portable library and enables i
     page.on('console', message => { if (message.type() === 'error') recordError('console', message.text()); });
     page.setDefaultTimeout(20_000);
     try {
-      // Wait for the actual entry document, not about:blank: reloading before
-      // main's loadFile() resolves would abort startup and make the app quit.
+      // Verify the actual initial startup, not about:blank or a later reload
+      // that could hide a startup-only failure.
       await page.waitForURL(url => url.protocol === 'file:' && url.pathname.endsWith('/ui/index.html'), { waitUntil: 'load' });
-      // firstWindow can also arrive after renderer scripts have run. Reload
-      // with listeners attached so packaged startup failures are observable.
-      await page.reload();
       await page.waitForFunction(() => document.querySelector('#reader')?.getAttribute('aria-busy') === 'false' && document.querySelector('#text-page')?.dataset.page === '7');
     } catch (error) {
       const diagnostics = await page.evaluate(async () => {
