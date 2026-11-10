@@ -1,0 +1,81 @@
+name: Folio Reader updater migration
+
+on:
+  push:
+    tags:
+      - 'reader-v1.1.2'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: folio-reader-migration-1.1.2
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Deliver the verified reader update to existing installations
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the tested Folio Reader release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir release
+          for artifact in Folio-Reader-Setup-1.1.2-x64.exe Folio-Reader-Setup-1.1.2-x64.exe.blockmap latest.yml SHA256SUMS.txt; do
+            curl --fail --show-error --location --retry 3 \
+              "https://github.com/TolibovZafarali/folio/releases/download/reader-v1.1.2/$artifact" \
+              --output "release/$artifact"
+          done
+
+      - name: Verify the exact installer and update files
+        shell: bash
+        run: |
+          set -euo pipefail
+          # These are the artifacts verified by folio's Windows release workflow
+          # https://github.com/TolibovZafarali/folio/actions/runs/42892445090
+          cat > expected-checksums.txt <<'CHECKSUMS'
+          8f1b969c7f0714bf6f9fe8e8834ffbfd4fa07000ff4437030af6c22daaddd504  Folio-Reader-Setup-1.1.2-x64.exe
+          cf137ace6e5c958dc86ac48c8b9b89f188a422b49d3e6d3438a498d93c01759c  Folio-Reader-Setup-1.1.2-x64.exe.blockmap
+          3e03f0739ed1d69678d1d0b9fffcc0f26cbb13e10f89c49a207ed465af48ba0a  latest.yml
+          CHECKSUMS
+          cmp expected-checksums.txt release/SHA256SUMS.txt
+          cd release
+          sha256sum --check SHA256SUMS.txt
+
+      - name: Publish the migration update on the original feed
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = 'TolibovZafarali/any-to-pdf'
+          cat > release-notes.md <<'NOTES'
+          Folio Reader 1.1.2 is available through the existing app's update button.
+
+          In Folio Reader 1.1.1, click **Check for updates**, then **Update and restart**. The app downloads and verifies the installer, saves your reading position, and restarts into the new version. Your books, progress, and preferences are preserved.
+
+          This migration release carries the exact tested installer from [TolibovZafarali/folio](https://github.com/TolibovZafarali/folio/releases/tag/reader-v1.1.2). After this update, future reader updates come from that repository automatically. This original feed remains available so existing installations can discover the migration.
+
+          Version 1.1.2 moves reading tools into the bookshelf panel, places Previous and Next page below the book content, and adds four remembered font choices for Text view.
+
+          The installer and update metadata are unchanged from the new repository's release, and their checksums are verified before publication. The Windows application and installed-library retention tests passed. Books and reading history stay on your computer.
+          NOTES
+          if gh release view reader-v1.1.2 --json isDraft --jq .isDraft > release-draft.txt 2>/dev/null; then
+            if [ "$(cat release-draft.txt)" != 'true' ]; then
+              echo 'Refusing to replace an already published release.' >&2
+              exit 1
+            fi
+          else
+            gh release create reader-v1.1.2 --draft --verify-tag \
+              --title 'Folio Reader 1.1.2 — automatic update migration' \
+              --notes-file release-notes.md
+          fi
+          gh release upload reader-v1.1.2 \
+            release/Folio-Reader-Setup-1.1.2-x64.exe \
+            release/Folio-Reader-Setup-1.1.2-x64.exe.blockmap \
+            release/latest.yml release/SHA256SUMS.txt --clobber
+          gh release edit reader-v1.1.2 --notes-file release-notes.md --draft=false --latest
